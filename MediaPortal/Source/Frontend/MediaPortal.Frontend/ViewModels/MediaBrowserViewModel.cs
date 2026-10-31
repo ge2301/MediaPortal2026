@@ -2803,14 +2803,10 @@ namespace MediaPortal.Frontend.ViewModels
         // The heading says the name once, without the year. The reference drew the series name from
         // SeriesAspect.SeriesName, which the importer keeps yearless; our library's title column carries the year
         // inside the name ("The Pitt (2025)"), so the heading strips a trailing year rather than saying it here
-        // beside the panel's own facts row, which names the year too. An episode stands under its series' name as
-        // well: its title column spells the whole row ("Alien: Earth S01E01 - Nimmerland"), and the season, the
-        // episode and the episode's own name stand in the facts a hand's width below - the heading saying them
-        // again would be the panel answering itself twice.
-        bool isEpisode = details.Season.HasValue || details.Episode.HasValue;
+        // beside the panel's own facts row, which names the year too.
         DetailsHeading = isSeason
             ? name
-            : YearlessName((isSeries || isEpisode) && !string.IsNullOrWhiteSpace(details.SeriesName)
+            : YearlessName(isSeries && !string.IsNullOrWhiteSpace(details.SeriesName)
                 ? details.SeriesName!.Trim()
                 : name);
         // The reference's detail screens put the tagline under the title and above the facts - the sentence the
@@ -3000,7 +2996,7 @@ namespace MediaPortal.Frontend.ViewModels
         AddFact(IsMusic ? "Released" : "First aired",
             details.FirstAired.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
       if (!string.IsNullOrWhiteSpace(details.Certification) && AgeLogosShown)
-        AddFact("Age", FirstCertification(details.Certification));
+        AddFact("Age", details.Certification!.Trim());
       if (details.Genres != null && details.Genres.Count > 0)
       {
         List<string> kinds = new List<string>();
@@ -3015,20 +3011,6 @@ namespace MediaPortal.Frontend.ViewModels
       if (details.PlayCount.HasValue && details.PlayCount.Value > 0)
         AddFact("Played", details.PlayCount.Value
             + (details.PlayCount.Value == 1 ? " time" : " times"));
-    }
-
-    /// <summary>
-    /// The first of a title's age certifications, said alone. Importers often stack every spelling one rating
-    /// ever got on one line ("DE:FSK 16 / DE:FSK-16 / DE:FSK16 / DE:16 / DE:ab 16"); it is one answer to one
-    /// question, and the panel's pair of word and answer has room for one answer.
-    /// </summary>
-    private static string FirstCertification(string? certification)
-    {
-      if (string.IsNullOrWhiteSpace(certification))
-        return "";
-
-      int bar = certification.IndexOf('/');
-      return (bar > 0 ? certification.Substring(0, bar) : certification).Trim();
     }
 
     /// <summary>One fact on the panel's list, which is only added when it has something to say.</summary>

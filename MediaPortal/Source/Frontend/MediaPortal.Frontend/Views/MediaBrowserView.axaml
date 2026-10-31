@@ -840,13 +840,8 @@
                      after them, in brackets and in the smaller light. A library that recorded no rating (no number
                      at all, or a nought) says nothing at all, which is that file's condition too: the stars and
                      their number stand or fall with TotalRating through ReferenceToBoolConverter. -->
-                <!-- The row the stars and their number stand in. Its bottom margin is sixteen because the facts
-                     under the head carry four of their own, and a viewer asked for twenty lines of air between
-                     the rating and what follows it. (The head's twelve-line spacing does not reach past its last
-                     visible line, and the tagline that would be that last line hides when there is none.) -->
                 <StackPanel Orientation="Horizontal"
                             Spacing="12"
-                            Margin="0,0,0,16"
                             IsVisible="{Binding DetailsRating, Converter={x:Static ObjectConverters.IsNotNull}}">
                   <ItemsControl ItemsSource="{Binding DetailsStars}" VerticalAlignment="Center">
                     <ItemsControl.ItemsPanel>
