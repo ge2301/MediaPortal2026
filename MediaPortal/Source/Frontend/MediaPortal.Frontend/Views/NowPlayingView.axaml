@@ -535,6 +535,15 @@
               <Path Data="{Binding TransportGlyph,
                           Converter={x:Static views:SkinIconGeometryConverter.Instance}}"/>
             </Button>
+            <!-- Stop beside play/pause: the remote has always had its stop key, and a viewer working with a
+                 mouse asked for the same door on the bar. Like the key, it ends the film and leaves the
+                 screen, back to where the viewer came from. -->
+            <Button Classes="glass icon" Name="stopButton" Click="OnStop"
+                    IsVisible="{Binding CanTransport}"
+                    AutomationProperties.Name="Stop">
+              <Path Data="{Binding Converter={x:Static views:SkinIconGeometryConverter.Instance},
+                                      ConverterParameter='PlayerControl/stop'}"/>
+            </Button>
             <Button Classes="glass icon" Name="forwardButton" Click="OnForward"
                     IsVisible="{Binding CanTransport}"
                     AutomationProperties.Name="{Binding SkipForwardCaption}">

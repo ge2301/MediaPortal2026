@@ -477,12 +477,34 @@ namespace Tests.Frontend
       Press(ButtonNamed(window, "forwardButton"));
       Assert.That(player.TimeInMs, Is.EqualTo(60_000), "forward stopped at the end of the media");
 
-      // There is no Stop button on the panel: a film that is watched to the end is finished, and a viewer who
-      // means to end it early presses the stop key of the remote, which is what a keyboard and a remote both
-      // have. The panel gives up nothing by leaving it out, and gains the room the transport is made of.
+      // The remote's stop key and the bar's stop button answer the same question, and the key is still the
+      // keyboard's way of it: the film ends outright and the screen leaves - here, where the window held
+      // nothing but the player, that means the window itself goes.
       Assert.That(PressKey(PlaybackView(window), Key.MediaStop), Is.True, "the screen answers the stop key");
       Assert.That(player.Calls, Does.Contain("Stop"), "which stopped the film");
       Assert.That(screen.IsPlaying, Is.False, "and the screen knows it");
+      Assert.That(window.IsVisible, Is.False, "and the screen left with it");
+    }
+
+    [AvaloniaTest]
+    public void TheStopButtonEndsTheFilmAndLeavesTheScreen()
+    {
+      // Stop is a button on the bar as much as a key on the remote: the viewer working with a mouse asked for
+      // the same door next to play/pause. It stops the film outright - no "Stopped" left to read - and leaves
+      // the screen the way Back leaves it: onto whatever the window holds underneath, or - as here, where the
+      // window held nothing but the player - closing the window.
+      var player = new FakePlayer();
+      ShellWindow window = ShowPlayback(player, out NowPlayingViewModel screen);
+      screen.Play(Film("film.mkv"));
+      Pump();
+      OpenOsd(window);
+
+      Press(ButtonNamed(window, "stopButton"));
+      Pump();
+
+      Assert.That(player.Calls, Does.Contain("Stop"), "the button stopped the film");
+      Assert.That(screen.IsPlaying, Is.False, "and the screen knows it");
+      Assert.That(window.IsVisible, Is.False, "and the screen went with the film, not the film with the screen");
     }
 
     [AvaloniaTest]

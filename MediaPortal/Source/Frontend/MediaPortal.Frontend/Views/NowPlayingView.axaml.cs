@@ -143,11 +143,9 @@ namespace MediaPortal.Frontend.Views
             }
             else if (args.Key == Key.MediaStop)
             {
-              // Stop is not one of the three rows' buttons - no player puts a stop among play, the sound and the
-              // subtitles - but the film still has to be stoppable, and the remote's stop key is the way it
-              // always was. The film stops; the screen stays, so a viewer can see that it stopped.
-              CancelSkipStep();
-              _viewModel.Stop();
+              // The remote's stop key and the bar's stop button say the same thing: the film stops and the
+              // screen leaves, back to where the viewer came from.
+              StopAndLeave();
               args.Handled = true;
             }
             else if (!_osdVisible && args.Key == Key.Left)
@@ -186,8 +184,9 @@ namespace MediaPortal.Frontend.Views
       // actually reach.
       _ring = new List<Control>
           {
-            infoButton, chapterBackButton, backButton, pauseButton, forwardButton, chapterForwardButton,
-            seekBar, subtitleButton, audioButton, volumeButton, fullscreenButton, settingsButton
+            infoButton, chapterBackButton, backButton, pauseButton, stopButton, forwardButton,
+            chapterForwardButton, seekBar, subtitleButton, audioButton, volumeButton, fullscreenButton,
+            settingsButton
           };
       DpadNavigation.Attach(this, _ring);
 
@@ -289,6 +288,36 @@ namespace MediaPortal.Frontend.Views
     private void OnPause(object? sender, RoutedEventArgs e)
     {
       _viewModel.TogglePause();
+    }
+
+    private void OnStop(object? sender, RoutedEventArgs e)
+    {
+      // Stop means: the film ends here and the viewer goes back to where they came from. Not pause, and not
+      // the back key's "leave it running" - the whole point of pressing stop is that nothing plays on after
+      // the screen is gone.
+      StopAndLeave();
+    }
+
+    /// <summary>
+    /// Stops playback outright and leaves the screen, landing where the back key lands: back onto the screen
+    /// the viewer came from, or - when the player was all the window held - closing the window.
+    /// </summary>
+    private void StopAndLeave()
+    {
+      CancelSkipStep();
+      // Stopping before the pop: the screen leaving on its own leaves the film running (that is the back
+      // key's promise), so the stop has to happen while this screen still stands here.
+      _viewModel.Stop();
+      LeaveScreen();
+    }
+
+    /// <summary>Leaves the screen without touching playback: pop the workflow, or close an all-playing window.</summary>
+    private void LeaveScreen()
+    {
+      if (_workflow != null && _workflow.Pop())
+        return;
+
+      (TopLevel.GetTopLevel(this) as Window)?.Close();
     }
 
     private void OnBack(object? sender, RoutedEventArgs e)
@@ -1085,10 +1114,7 @@ namespace MediaPortal.Frontend.Views
       // Leaving the playback screen leaves the film running; when this screen is all the window holds there is
       // nothing to pop, and the window itself goes. Back reached the panel first and the list before that, so
       // by the time it gets here the viewer means to leave the film to itself.
-      if (_workflow != null && _workflow.Pop())
-        return;
-
-      (TopLevel.GetTopLevel(this) as Window)?.Close();
+      LeaveScreen();
     }
   }
 }
