@@ -1913,7 +1913,11 @@ namespace MediaPortal.Frontend.Views
           // (a cover keeps its glass branch and a shortcut its cover branch) folded away, and the folded one is
           // still 'visible' on itself while being hidden by its parent. Standing on it from the menu would aim at
           // a button that cannot be stood on and leave the viewer where they were.
-          .Where(button => button.Focusable && button.IsEffectivelyVisible && button.IsEnabled)
+          // IsEffectivelyEnabled for the same reason once more: the dark double-buffer host wears its wall realized
+          // and ready (the neighbour stands built for the next step), but the host itself is switched off - a tile
+          // on it is enabled on itself and unreachable through its host, exactly the mirror image of the folded
+          // surface above. Walking onto it would aim the caret at a button that refuses it.
+          .Where(button => button.Focusable && button.IsEffectivelyVisible && button.IsEffectivelyEnabled)
           .ToArray();
     }
 

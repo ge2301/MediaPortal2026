@@ -1380,7 +1380,9 @@ namespace MediaPortal.Frontend.Views
     /// </summary>
     private static Control? FirstControlTakingFocus(Control root)
     {
-      if (root.Focusable && root.IsVisible && root.IsEnabled)
+      // The effective answer, not the control's own: a control inside a subtree that was switched off refuses
+      // the caret through its parent just the same, and handing the keyboard to it strands the keyboard.
+      if (root.Focusable && root.IsVisible && root.IsEffectivelyEnabled)
         return root;
 
       foreach (Control child in root.GetVisualChildren().OfType<Control>())

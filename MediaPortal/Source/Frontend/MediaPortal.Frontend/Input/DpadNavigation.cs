@@ -126,8 +126,11 @@ namespace MediaPortal.Frontend.Input
     {
       // A hidden area is not an area: the home screen keeps the playback button out of the ring on a machine
       // without a player, but the buttons it does put in can still be disabled by the state of the screen, and
-      // Avalonia refuses focus to both kinds.
-      return control.IsEnabled && control.Focusable && EffectivelyVisible(control);
+      // Avalonia refuses focus to both kinds. The effective answer is the one that matters: the home's dark
+      // double-buffer host switches its whole subtree off (IsEnabled="False" on the host, the reference's way of
+      // keeping the caret off the wall that is standing ready), and a tile on such a host is enabled on itself
+      // yet refuses the caret through its host.
+      return control.IsEffectivelyEnabled && control.Focusable && EffectivelyVisible(control);
     }
 
     /// <summary>
