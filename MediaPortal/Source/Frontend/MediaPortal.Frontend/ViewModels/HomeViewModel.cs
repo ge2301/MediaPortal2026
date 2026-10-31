@@ -981,6 +981,23 @@ namespace MediaPortal.Frontend.ViewModels
     private readonly MainMenuEntry?[] _wallOwner = new MainMenuEntry?[2];
 
     /// <summary>
+    /// How long a stood wall rests before the screen starts reading the neighbour tile's wall into the dark host.
+    /// Longer than one settling and one rise together, so the probe never competes with the step it follows; the
+    /// reference paid this price continuously (its contents were all built from the first wake), a two-host face
+    /// pays it once per quiet moment instead.
+    /// </summary>
+    private const int NEIGHBOR_PROBE_MS = 900;
+
+    /// <summary>The tile the walk last stepped from, so the next probe knows which way the walker was going.</summary>
+    private MainMenuEntry? _lastWalkedEntry;
+
+    /// <summary>Which way along the rail the walk was moving: +1 down, -1 up, 0 while nobody has walked yet.</summary>
+    private int _lastRailDirection;
+
+    /// <summary>The neighbour read under way; a new step or probe retires it through its generation, not this token.</summary>
+    private CancellationTokenSource? _probeCancellation;
+
+    /// <summary>
     /// Which reading of the pane is the current one. Only the newest is allowed to keep writing, because walking
     /// the menu with a remote fires a load per stop, and an older answer arriving late would append its titles under
     /// a newer entry's heading.
@@ -1157,6 +1174,10 @@ namespace MediaPortal.Frontend.ViewModels
       // is put in the light once whichever way the standing finished.
       WallStood?.Invoke();
 
+      // And while the viewer reads this wall, the dark host learns its neighbour's - the reference's step was a
+      // pointer swap because its neighbours stood built already (ScheduleNeighborProbe).
+      ScheduleNeighborProbe(entry, generation);
+
       // The reference's home screen never stands on nothing: the walker is put on the first cover the moment the
       // wall is up, which is also what picks the fanart behind the screen and the line at its bottom left.
       if (SelectedContent == null)
@@ -1246,6 +1267,9 @@ namespace MediaPortal.Frontend.ViewModels
       _builtWalls.Clear();
       _wallOwner[0] = null;
       _wallOwner[1] = null;
+      CancellationTokenSource? probe = Interlocked.Exchange(ref _probeCancellation, null);
+      probe?.Cancel();
+      probe?.Dispose();
     }
 
     /// <summary>
@@ -1749,6 +1773,156 @@ namespace MediaPortal.Frontend.ViewModels
     }
 
     /// <summary>
+    /// Remembers which way along the rail the walk moved, so the next quiet moment preheats the wall the walker
+    /// is likely to ask for next rather than a coin-toss neighbour.
+    /// </summary>
+    private void NoteWalkDirection(MainMenuEntry? to)
+    {
+      MainMenuEntry? from = _lastWalkedEntry;
+      _lastWalkedEntry = to;
+      if (from == null || to == null || ReferenceEquals(from, to))
+        return;
+
+      int delta = WalkOrder().IndexOf(to) - WalkOrder().IndexOf(from);
+      if (delta != 0)
+        _lastRailDirection = delta > 0 ? 1 : -1;
+    }
+
+    /// <summary>
+    /// The sequence the rail walks its entries in, which is what a neighbour question is about. The generic
+    /// <see cref="Menu"/> is not it: the worn Nereus menu projects its own configured list onto the rail
+    /// (<see cref="DisplayMenu"/>), and guessing along the wrong row pre-heats the wall beside the one the
+    /// viewer is heading for.
+    /// </summary>
+    private List<MainMenuEntry> WalkOrder()
+    {
+      return IsNereusHome ? _nereusMenu.MainMenuItems.ToList() : Menu.ToList();
+    }
+
+    /// <summary>
+    /// Asks for the wall of the neighbour the walker is likely to step onto next to be read and put onto the dark
+    /// host while nothing is being waited for. The reference needed no such trick - every one of its contents
+    /// stood built for the whole session (<c>HomeMenuModel._homeContent</c> :82) - and this is a two-host face
+    /// honouring that law one tile ahead instead of seven at once. The settling stays untouched: the step still
+    /// waits its full half second, and what the probe saves is the reading and the building that used to sit
+    /// between the settling's end and the wall standing - the reference's step was a pointer swap precisely
+    /// because nothing had to be built at its moment, and nothing has to be built at this one either.
+    /// </summary>
+    /// <remarks>
+    /// The probe never touches the light: it reads into the cache and fills only the dark host, and it retires
+    /// itself the moment a newer generation exists (its read was asked with the older number and answers stale).
+    /// Weather and news neighbours are left alone - their own refresh law says every visit reads afresh, and a
+    /// pre-read wall would stand between that law and the viewer. A mispredicted step costs exactly what it
+    /// costs today: the dark host is refilled with the wall that was asked for.
+    /// </remarks>
+    private void ScheduleNeighborProbe(MainMenuEntry? standing, int generation)
+    {
+      CancellationTokenSource? previous = Interlocked.Exchange(ref _probeCancellation, null);
+      previous?.Cancel();
+      previous?.Dispose();
+
+      MainMenuEntry? neighbour = NeighbourToPreload(standing);
+      if (neighbour == null)
+        return;
+
+      CancellationTokenSource probe = new CancellationTokenSource();
+      _probeCancellation = probe;
+      _ = ProbeNeighbourAsync(neighbour, generation, probe);
+    }
+
+    /// <summary>
+    /// The neighbour whose wall the dark host should be wearing: the one the walk was heading towards first, its
+    /// opposite as the fallback, and neither weather, news, nor the tile already standing.
+    /// </summary>
+    private MainMenuEntry? NeighbourToPreload(MainMenuEntry? standing)
+    {
+      if (standing == null)
+        return null;
+
+      List<MainMenuEntry> rail = WalkOrder();
+      int index = rail.IndexOf(standing);
+      if (index < 0)
+        return null;
+
+      int first = _lastRailDirection >= 0 ? index + 1 : index - 1;
+      int second = _lastRailDirection >= 0 ? index - 1 : index + 1;
+      foreach (int at in new[] { first, second })
+      {
+        if (at < 0 || at >= rail.Count)
+          continue;
+
+        MainMenuEntry candidate = rail[at];
+        if (ReferenceEquals(candidate, standing) || ReferenceEquals(candidate, SelectedEntry))
+          continue;
+        if (IsWeatherEntry(candidate) || IsNewsEntry(candidate))
+          continue;
+        return candidate;
+      }
+
+      return null;
+    }
+
+    private async Task ProbeNeighbourAsync(MainMenuEntry neighbour, int generation, CancellationTokenSource probe)
+    {
+      CancellationToken cancellation = probe.Token;
+      try
+      {
+        await Task.Delay(NEIGHBOR_PROBE_MS, cancellation);
+
+        // The standing wall's own generation must still be the newest - a step that came in between the rest and
+        // this moment owns the screen now, and its own machinery reads and builds whatever tile it stands on.
+        if (generation != Volatile.Read(ref _contentGeneration))
+        {
+          HomeTrace.Log("probe.stale", TraceLabel(neighbour));
+          return;
+        }
+
+        if (!_builtWalls.TryGetValue(neighbour, out BuiltWall? held))
+        {
+          List<HomeContentGroup> wall = new List<HomeContentGroup>();
+          List<HomeRow> rows = new List<HomeRow>();
+          // Asked with the standing generation: any step while this reads makes the read answer stale, and a
+          // stale answer is refused below - the probe never outlives the moment that made it worthwhile.
+          if (!await ReadWallAsync(neighbour, generation, cancellation, wall, rows))
+            return;
+
+          if (generation != Volatile.Read(ref _contentGeneration))
+          {
+            HomeTrace.Log("probe.stale", TraceLabel(neighbour));
+            return;
+          }
+
+          held = new BuiltWall(wall, rows);
+          _builtWalls[neighbour] = held;
+        }
+
+        int next = 1 - _wallIndex;
+        if (!ReferenceEquals(_wallOwner[next], neighbour) && generation == Volatile.Read(ref _contentGeneration))
+        {
+          HomeTrace.Log("probe.stood", TraceLabel(neighbour) + string.Format(CultureInfo.InvariantCulture, " host={0}", next));
+          PutUpWallOn(next, held.Wall, held.Rows);
+          _wallOwner[next] = neighbour;
+        }
+      }
+      catch (OperationCanceledException)
+      {
+      }
+      catch (ServerApiException)
+      {
+        // A neighbour whose server threw at the probe will throw its own line at the visit that comes; a probe
+        // that fails quietly is what it was - a guess.
+      }
+      catch (Exception)
+      {
+      }
+      finally
+      {
+        if (Interlocked.CompareExchange(ref _probeCancellation, null, probe) == probe)
+          probe.Dispose();
+      }
+    }
+
+    /// <summary>
     /// Which tile a line of the home trace belongs to, in as many characters as the instrument needs.
     /// </summary>
     private static string TraceLabel(MainMenuEntry? entry)
@@ -1774,6 +1948,8 @@ namespace MediaPortal.Frontend.ViewModels
     /// </summary>
     partial void OnSelectedEntryChanged(MainMenuEntry? value)
     {
+      NoteWalkDirection(value);
+
       foreach (MainMenuEntry entry in Menu.Concat(_nereusMenu.MainMenuItems))
         entry.IsSelected = ReferenceEquals(entry, value);
 

@@ -5474,6 +5474,45 @@ namespace Tests.Frontend
           + "pictures pane now - the late answer had to throw itself away rather than append to it");
     }
 
+    /// <summary>
+    /// The neighbour read, standing the wall ahead: while one wall is watched, the wall of the neighbour the walk
+    /// would step onto next is read and laid out on the dark host, so the step that follows is the reference's
+    /// pointer swap and nothing else - no reading, no building, no burst between the settling's end and the wall
+    /// standing. The settling itself is not moved: the step still waits its full half second.
+    /// </summary>
+    [AvaloniaTest]
+    public async Task WhileAWallStandsTheNeighboursWallIsBuiltInTheDarkHostAheadOfTheStep()
+    {
+      RegisterLibrary(Title("Alien Earth", 2025, RESOURCE_SYSTEM_ID.ToString("B") + "://" + LOCAL_PATH));
+      InProcessApi server = StartServer();
+
+      HomeViewModel home = HomeOn(server);
+      Refreshed(home);
+
+      await home.ShowContentAsync(EntryNamed(home.Menu, "Movies"));
+      Assert.That(home.ContentGroups, Is.Not.Empty, "the standing wall carries its bands");
+      int standing = home.WallIndex;
+      var dark = standing == 0 ? home.WallGroups1 : home.WallGroups0;
+      Assert.That(dark, Is.Empty, "the dark host starts out wearing nobody's wall");
+
+      MainMenuEntry neighbour = (MainMenuEntry) typeof(HomeViewModel)
+          .GetMethod("NeighbourToPreload", BindingFlags.NonPublic | BindingFlags.Instance)!
+          .Invoke(home, new object?[] { EntryNamed(home.Menu, "Movies") })!;
+
+      await Task.Delay(2500);
+
+      Assert.That(home.WallIndex, Is.EqualTo(standing),
+          "the probe builds into the dark host and never touches the light");
+      Assert.That(dark, Is.Not.Empty,
+          "the neighbour's wall did not come to stand in the dark host while the viewer had the floor");
+
+      await home.ShowContentAsync(neighbour);
+
+      Assert.That(ReferenceEquals(home.ContentGroups, dark), Is.True,
+          "the step onto the pre-heated neighbour was the pointer swap the reference made it be: the very "
+          + "collection the probe laid out stands now, not one emptied and filled again");
+    }
+
     #endregion
   }
 }
