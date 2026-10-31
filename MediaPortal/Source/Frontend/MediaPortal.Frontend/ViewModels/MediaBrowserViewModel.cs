@@ -2792,21 +2792,21 @@ namespace MediaPortal.Frontend.ViewModels
         // of every season in the house. Above one season's episodes that says the series twice and the year twice,
         // and hides the one thing the panel is there to say - which season this is.
         bool isSeason = MediaCatalog.IsSeason(title.ReadThrough);
-        // A row of the series shelf is a show, and a show keeps its name - free of the year, as the importers write
-        // it - on its own aspect. That is the name the reference's cover-details templates drew
-        // (SeriesAspectWrapper.SeriesName), and the server now hands it over in "seriesName", so it is the heading
-        // rather than the title column's name, which is the same name with the year welded on.
-        bool isSeries = MediaCatalog.IsSeries(title.ReadThrough);
         string name = isSeason || string.IsNullOrWhiteSpace(details.Title)
             ? title.Name
             : details.Title!.Trim();
-        // The heading says the name once, without the year. The reference drew the series name from
-        // SeriesAspect.SeriesName, which the importer keeps yearless; our library's title column carries the year
-        // inside the name ("The Pitt (2025)"), so the heading strips a trailing year rather than saying it here
-        // beside the panel's own facts row, which names the year too.
+        // The heading says the series' name and nothing else: as big as it is, it is the line a viewer reads
+        // first, and whatever else it carries it carries twice. A show keeps its name - free of the year, as the
+        // importers write it - on its own aspect, which the server hands over as "seriesName" for a show, for one
+        // of its seasons and for one of its episodes alike (MediaController:1296-1328); the reference's
+        // cover-details templates drew that same yearless name (SeriesAspectWrapper.SeriesName). The year and the
+        // episode's own number and name all stand in the facts band under the rating already, so the heading
+        // leaves them there - "Alien: Earth" over "S01E01 · Nimmerland" in words, rather than the whole sentence
+        // written twice. Only where a title belongs to no series at all - a film - does its own name head the
+        // panel, and then without the year, which the facts name too.
         DetailsHeading = isSeason
             ? name
-            : YearlessName(isSeries && !string.IsNullOrWhiteSpace(details.SeriesName)
+            : YearlessName(!string.IsNullOrWhiteSpace(details.SeriesName)
                 ? details.SeriesName!.Trim()
                 : name);
         // The reference's detail screens put the tagline under the title and above the facts - the sentence the
@@ -2996,7 +2996,7 @@ namespace MediaPortal.Frontend.ViewModels
         AddFact(IsMusic ? "Released" : "First aired",
             details.FirstAired.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
       if (!string.IsNullOrWhiteSpace(details.Certification) && AgeLogosShown)
-        AddFact("Age", details.Certification!.Trim());
+        AddFact("Age", FirstAge(details.Certification!));
       if (details.Genres != null && details.Genres.Count > 0)
       {
         List<string> kinds = new List<string>();
@@ -3011,6 +3011,21 @@ namespace MediaPortal.Frontend.ViewModels
       if (details.PlayCount.HasValue && details.PlayCount.Value > 0)
         AddFact("Played", details.PlayCount.Value
             + (details.PlayCount.Value == 1 ? " time" : " times"));
+    }
+
+    /// <summary>
+    /// The first of the ages a library wrote down for one title.
+    /// </summary>
+    /// <remarks>
+    /// An importer that matched several labels files them all under the one heading, separated by slashes
+    /// (<c>DE:FSK 16 / DE:FSK-16 / DE:FSK16 / DE:16 / DE:ab 16</c>) - one answer written five ways, which takes
+    /// the whole width of the panel away from the kinds of story standing beside it. The panel is a screen, not
+    /// the library's record: it says the age once, in the spelling the library met first.
+    /// </remarks>
+    private static string FirstAge(string certification)
+    {
+      int slash = certification.IndexOf('/');
+      return slash < 0 ? certification.Trim() : certification.Substring(0, slash).Trim();
     }
 
     /// <summary>One fact on the panel's list, which is only added when it has something to say.</summary>

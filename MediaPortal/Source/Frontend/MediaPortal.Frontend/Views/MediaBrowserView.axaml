@@ -840,8 +840,15 @@
                      after them, in brackets and in the smaller light. A library that recorded no rating (no number
                      at all, or a nought) says nothing at all, which is that file's condition too: the stars and
                      their number stand or fall with TotalRating through ReferenceToBoolConverter. -->
+                <!-- Four here, twelve that the column itself puts between every pair of its children (the tagline
+                     stands here even when a title has none, and an invisible child still costs its twelve), and
+                     four the facts band carries above itself: twenty lines of ground between a rating and the
+                     answers under it, which is what the panel was asked to leave. Measured, not reckoned: the
+                     facts stood two hundred ten lines down with sixteen here and one hundred ninety-eight with
+                     four, over the same title. -->
                 <StackPanel Orientation="Horizontal"
                             Spacing="12"
+                            Margin="0,0,0,4"
                             IsVisible="{Binding DetailsRating, Converter={x:Static ObjectConverters.IsNotNull}}">
                   <ItemsControl ItemsSource="{Binding DetailsStars}" VerticalAlignment="Center">
                     <ItemsControl.ItemsPanel>
