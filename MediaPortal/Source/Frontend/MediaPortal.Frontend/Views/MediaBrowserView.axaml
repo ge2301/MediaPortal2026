@@ -840,15 +840,15 @@
                      after them, in brackets and in the smaller light. A library that recorded no rating (no number
                      at all, or a nought) says nothing at all, which is that file's condition too: the stars and
                      their number stand or fall with TotalRating through ReferenceToBoolConverter. -->
-                <!-- Four here, twelve that the column itself puts between every pair of its children (the tagline
-                     stands here even when a title has none, and an invisible child still costs its twelve), and
-                     four the facts band carries above itself: twenty lines of ground between a rating and the
-                     answers under it, which is what the panel was asked to leave. Measured, not reckoned: the
-                     facts stood two hundred ten lines down with sixteen here and one hundred ninety-eight with
-                     four, over the same title. -->
+                <!-- Fourteen here, twelve that the column itself puts between every pair of its children (the
+                     tagline stands here even when a title has none, and an invisible child still costs its
+                     twelve), and four the facts band carries above itself: thirty lines of ground between a
+                     rating and the answers under it - twenty were asked for first, then ten more on the
+                     viewer's word. Measured, not reckoned: the facts stood one hundred ninety-eight lines
+                     down with four here, and ten lower with this. -->
                 <StackPanel Orientation="Horizontal"
                             Spacing="12"
-                            Margin="0,0,0,4"
+                            Margin="0,0,0,14"
                             IsVisible="{Binding DetailsRating, Converter={x:Static ObjectConverters.IsNotNull}}">
                   <ItemsControl ItemsSource="{Binding DetailsStars}" VerticalAlignment="Center">
                     <ItemsControl.ItemsPanel>
@@ -907,7 +907,8 @@
 
                 <!--
                   The poster, in the story's row and standing on the story's first line, which is where it was asked
-                  for: the top margin is the same twelve the story's own scroller carries, so the two begin together.
+                  for: the top margin is the same forty the story's own column carries, so the two begin together -
+                  when the episode's name pushes the story down, the poster is pushed with it and stays flush.
                   The reference stood its MoviePoster at the right hand end of the panel with the picture inset in a
                   box of its own (MediaItemListMovieDetails.inc:23-38); the size here is the box that was drawn for
                   it.  A title the library keeps no poster of leaves the box empty - not a poster standing in for a
@@ -923,7 +924,7 @@
                         Grid.Column="1"
                         MaxWidth="380"
                         MaxHeight="500"
-                        Margin="20,12,0,0"
+                        Margin="20,40,0,0"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Top"
                         CornerRadius="10"
@@ -947,19 +948,31 @@
                   the reference's Label carries no mask of any kind, so a story that ends two thirds down the
                   column ends in readable words rather than in a fade nobody asked for.
                 -->
-                <ScrollViewer Grid.Row="2"
-                              Grid.Column="0"
-                              Name="plotScroller"
-                              Margin="0,12,0,0"
-                              HorizontalScrollBarVisibility="Disabled"
-                              VerticalScrollBarVisibility="Hidden">
-                  <TextBlock Name="detailsText"
-                             Text="{Binding DetailsText}"
-                             FontSize="23"
-                             LineHeight="32"
+                <StackPanel Grid.Row="2"
+                            Grid.Column="0"
+                            Spacing="8"
+                            Margin="0,40,0,0">
+                  <!-- The episode's name, in bold over its own story and out of the fact list: the story under
+                       it is this episode's sentence, and a title over its sentence is what a viewer reads -
+                       a number row cannot carry it without the story losing its head. Only episodes wear it;
+                       every other title answers the empty string and the row costs nothing. -->
+                  <TextBlock Text="{Binding DetailsEpisodeName}"
+                             FontSize="26"
+                             FontWeight="Bold"
                              Foreground="{DynamicResource TextBrush}"
-                             TextWrapping="Wrap"/>
-                </ScrollViewer>
+                             TextWrapping="Wrap"
+                             IsVisible="{Binding DetailsEpisodeName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                  <ScrollViewer Name="plotScroller"
+                                HorizontalScrollBarVisibility="Disabled"
+                                VerticalScrollBarVisibility="Hidden">
+                    <TextBlock Name="detailsText"
+                               Text="{Binding DetailsText}"
+                               FontSize="23"
+                               LineHeight="32"
+                               Foreground="{DynamicResource TextBrush}"
+                               TextWrapping="Wrap"/>
+                  </ScrollViewer>
+                </StackPanel>
               </Grid>
             </Panel>
           </Border>

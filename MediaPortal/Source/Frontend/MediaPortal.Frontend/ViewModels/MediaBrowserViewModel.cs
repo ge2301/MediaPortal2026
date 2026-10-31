@@ -692,6 +692,14 @@ namespace MediaPortal.Frontend.ViewModels
     private string _detailsText = "";
 
     /// <summary>
+    /// The name one episode of a series bears, said in bold over its story. It stands there and nowhere else:
+    /// a fact among the facts it is not - the story below is this episode's own sentence, and the name it
+    /// opens belongs to the sentence's title, not to the shelf's catalogue numbers beside the rating.
+    /// </summary>
+    [ObservableProperty]
+    private string _detailsEpisodeName = "";
+
+    /// <summary>
     /// Where the file stands, in the words the server wrote down.
     /// </summary>
     /// <remarks>
@@ -2832,6 +2840,11 @@ namespace MediaPortal.Frontend.ViewModels
         // has nothing either does the panel admit that nothing was written.
         DetailsText = details.Description ?? details.SeriesOverview
             ?? "Nothing was written about this title on this server.";
+        // The episode's name walks out of the fact list and stands in bold over its own story - the story is
+        // the sentence of THIS episode, and its title belongs over the sentence, not among the shelf numbers.
+        DetailsEpisodeName = !isSeason && !string.IsNullOrWhiteSpace(details.EpisodeName)
+            ? details.EpisodeName!.Trim()
+            : "";
         DetailsPath = ShownPath(details.Path ?? title.Title.Path);
         DetailsRating = ToldRating(details);
         DetailsRatingWords = DetailsRating.HasValue
@@ -2990,8 +3003,8 @@ namespace MediaPortal.Frontend.ViewModels
           AddFact("Season", details.Season.Value.ToString(CultureInfo.InvariantCulture));
         if (details.Episode.HasValue)
           AddFact("Episode", details.Episode.Value.ToString(CultureInfo.InvariantCulture));
-        if (!string.IsNullOrWhiteSpace(details.EpisodeName))
-          AddFact("Episode name", details.EpisodeName!.Trim());
+        // The episode's name is no fact of the shelf's - it stands in bold over the story, where the story's
+        // title belongs (see DetailsEpisodeName); the band keeps only the numbers, which are the catalogue.
       }
 
       int? minutes = details.RuntimeMinutes ?? title.Title.RuntimeMinutes;
