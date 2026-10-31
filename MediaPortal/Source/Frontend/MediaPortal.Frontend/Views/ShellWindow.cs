@@ -227,7 +227,7 @@ namespace MediaPortal.Frontend.Views
       Opened += ScreenOpened;
       // What the frames cost, when somebody asks for it. See ArmFrameLog; nobody pays for this when the
       // variable is not set, which is every run that was started by hand or by a viewer.
-      Opened += delegate { ArmFrameLog(); };
+      Opened += delegate { ArmFrameLog(); ArmHomeTraceFrames(); };
       Closed += delegate { WriteFrameLog(); };
       Closed += delegate
       {
@@ -1481,6 +1481,27 @@ namespace MediaPortal.Frontend.Views
       {
         // A log nobody can write is not a reason to stop drawing the screen.
       }
+    }
+
+    /// <summary>
+    /// Hands <see cref="Services.HomeTrace"/> the composition's own beat: while the instrument is armed for
+    /// it, this window keeps asking for one frame at a time and tells the trace each time one arrives, so
+    /// the home screen's ledger knows which frames it got and how far apart they stood. Nothing turns when
+    /// the variable is not set, and the asking has the same price it has for the frame log.
+    /// </summary>
+    private void ArmHomeTraceFrames()
+    {
+      if (!Services.HomeTrace.Enabled)
+        return;
+
+      RequestAnimationFrame(PumpHomeTraceFrame);
+    }
+
+    /// <summary>One frame told to the trace, and the ask for the next, because the ask is good for exactly one.</summary>
+    private void PumpHomeTraceFrame(TimeSpan frameTime)
+    {
+      Services.HomeTrace.FrameTick();
+      RequestAnimationFrame(PumpHomeTraceFrame);
     }
 
     /// <summary>
