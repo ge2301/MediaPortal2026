@@ -1249,6 +1249,21 @@ namespace MediaPortal.Frontend.Views
         // scrolling is not a fall; see RescueShelfCaret for where the fetch ends and letting-rest begins.
         if (!(DataContext is MediaBrowserViewModel screen) || !screen.MediaMenuVisible)
         {
+          // The click's own handover: the tile the caret landed on is recycled by the layout the pressed
+          // command just changed (details off widens the wall), and between the recycling and the click
+          // settling the focus manager names NOTHING at all. That nothing is not a viewer who walked away -
+          // nobody aims for a window without a caret - and the same click completes a beat later onto the
+          // row of the rail that just slid off the screen, where the watching was the only hand left to
+          // catch it. So the nothing is answered like the fall it is: the tile is asked for again.
+          if (fallen == null)
+          {
+            if (titlesList.IsEffectivelyVisible && RescueShelfCaret())
+              quiet = 120;
+            else if (--quiet <= 0)
+              timer.Stop();
+            return;
+          }
+
           if (HoldsRailCaret(fallen))
           {
             if (RescueShelfCaret())
