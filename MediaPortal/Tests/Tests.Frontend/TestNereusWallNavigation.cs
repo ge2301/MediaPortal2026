@@ -1019,8 +1019,10 @@ namespace Tests.Frontend
       /// <summary>The wall's sections as boxes in the pane's coordinates, container and all.</summary>
       public List<Rect> BandsInPane()
       {
+        // Of the pair of wall hosts, the one that stands: the dark host is switched off (HomeView.SyncWallHosts).
         ItemsControl standing = _pane.GetVisualDescendants().OfType<ItemsControl>()
-            .First(candidate => candidate.Name == "nereusWallStanding");
+            .First(candidate =>
+                (candidate.Name == "nereusWall0" || candidate.Name == "nereusWall1") && candidate.IsEnabled);
 
         var boxes = new List<Rect>();
         foreach (Control? container in standing.GetRealizedContainers())

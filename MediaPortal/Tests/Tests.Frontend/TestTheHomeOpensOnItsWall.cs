@@ -152,7 +152,10 @@ namespace Tests.Frontend
 
     private static Control WallOf(ShellWindow window)
     {
-      return window.GetVisualDescendants().OfType<Control>().Single(control => control.Name == "nereusWallStanding");
+      // Of the pair of wall hosts, the one that stands: the dark host is switched off (HomeView.SyncWallHosts),
+      // which is how the reference kept its hidden ContentControl from ever taking the caret.
+      return window.GetVisualDescendants().OfType<Control>()
+          .Single(control => (control.Name == "nereusWall0" || control.Name == "nereusWall1") && control.IsEnabled);
     }
 
     private static int Squares(Control wall)

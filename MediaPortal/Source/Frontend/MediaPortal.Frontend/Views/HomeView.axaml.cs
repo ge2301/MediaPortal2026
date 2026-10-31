@@ -18,6 +18,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
@@ -29,6 +30,7 @@ using Avalonia.Layout;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using MediaPortal.Frontend.Input;
+using MediaPortal.Frontend.Services;
 using MediaPortal.Frontend.Skins.Nereus;
 using MediaPortal.Frontend.Skins.WMC;
 using MediaPortal.Frontend.Theming;
@@ -204,28 +206,21 @@ namespace MediaPortal.Frontend.Views
       _opensScreen = screenGate;
       InitializeComponent();
 
-      // One wall on the screen, and the change of entries is this wall going out and its successor coming up. The
-      // model reads a wall where the screen cannot see it and then asks this view for the way between the two:
-      // SinkStandingWallAsync below, and RaiseWall where the finished wall arrives. The wall starts in the dark so
-      // that even the first wall of a session comes up on its curve rather than appearing.
-      nereusWallStanding.Opacity = 0;
+      // Two hosts carry the walls, and the change of entries is the pair swapping which one is looked at - the
+      // reference's own exchange (HomeMenuModel.UpdateContent :660-673). The model reads a wall into the dark
+      // host where the screen cannot see it and then asks this view for the way between the two:
+      // SinkStandingWallAsync below, and RaiseWall where the finished wall arrives. Both walls start in the dark
+      // so that even the first wall of a session comes up on its curve rather than appearing.
+      nereusWall0.Opacity = 0;
+      nereusWall1.Opacity = 0;
+      SyncWallHosts();
       _home.WallHandover = SinkStandingWallAsync;
       _home.WallLeaving = BeginWallSink;
+      // A flip and a no-op write no band and send no notification - this is their turn to be heard with.
+      _home.WallStood = QueueWallArrival;
 
-      home.ContentGroups.CollectionChanged += delegate
-      {
-        // A wall is put on band by band, and every band is a notification of its own. Answered on the spot, one
-        // change of entries folded the pane away, raised it on one band, raised it again on two and again on three,
-        // and asked for the wall's measurement four times over - a wall watched being built, which is the one thing
-        // this exchange exists to prevent, and three layout passes of a tree that is only finished at the last
-        // band. So the beat is asked for once and runs when the swapping is through: what it looks at then is the
-        // wall the viewer is meant to see, and it answers it once.
-        if (_wallArrivalQueued)
-          return;
-
-        _wallArrivalQueued = true;
-        Dispatcher.UIThread.Post(PutFinishedWallInLight);
-      };
+      home.WallGroups0.CollectionChanged += delegate { QueueWallArrival(); };
+      home.WallGroups1.CollectionChanged += delegate { QueueWallArrival(); };
 
       // The labels of the main menu survive any skin change, by fiat: the moment this view is built it owns
       // its own tile tree, and any moment afterwards when no skin answers the home menu's key, the view's
@@ -272,6 +267,8 @@ namespace MediaPortal.Frontend.Views
       {
         if (e.PropertyName == nameof(HomeViewModel.HomeLayout))
           ApplyHomeLayout();
+        else if (e.PropertyName == nameof(HomeViewModel.WallIndex))
+          SyncWallHosts();
         else if (e.PropertyName == nameof(HomeViewModel.SelectedEntry))
         {
           RebuildCross();
@@ -980,7 +977,10 @@ namespace MediaPortal.Frontend.Views
 
       long left = WALL_SINK_MS + WALL_SINK_ROOM_MS - _wallSink.ElapsedMilliseconds;
       if (left > 0)
+      {
+        HomeTrace.Log("sink.tail", left.ToString());
         await Task.Delay((int)left);
+      }
     }
 
     /// <summary>
@@ -997,14 +997,64 @@ namespace MediaPortal.Frontend.Views
       // Nothing standing, nothing to take down: an empty area, or the first wall of a session. Its successor comes
       // up out of the fold on RaiseWall, and waiting for a fade with no picture to fade would only delay it.
       if (!_home.IsNereusHome || !nereusContentPane.IsVisible || _home.ContentGroups.Count == 0)
+      {
+        HomeTrace.Log("sink.skip");
         return;
+      }
 
       // The way down is the shorter curve the styles block keeps under this class name; it is put on for the walk
       // down and taken off again on the way up, which leaves the wall wearing its rise curve at every other time.
       _wallSinking = true;
       _wallSink.Restart();
-      nereusWallStanding.Classes.Add(WALL_SINKING_CLASS);
-      nereusWallStanding.Opacity = 0;
+      StandingWall.Classes.Add(WALL_SINKING_CLASS);
+      StandingWall.Opacity = 0;
+      HomeTrace.Log("sink");
+    }
+
+    /// <summary>
+    /// The host that wears the wall the viewer is looking at, and the one that wears the wall being built or the
+    /// wall the viewer may walk back to. Which is which is the model's one number (<see
+    /// cref="HomeViewModel.WallIndex"/>), the same pointer the reference kept in <c>ContentIndex</c>.
+    /// </summary>
+    private ItemsControl StandingWall => _home.WallIndex == 0 ? nereusWall0 : nereusWall1;
+
+    /// <summary>
+    /// Lays the pair the way the reference laid its two ContentControls: the standing host takes part in the
+    /// screen and can be walked onto, and the dark one is switched off - <c>IsEnabled="False"</c> is what the
+    /// reference's hidden ContentControl carries so its tiles can never take the caret - while its wall stays
+    /// realized and ready for the walk back.
+    /// </summary>
+    private void SyncWallHosts()
+    {
+      ItemsControl standing = StandingWall;
+      ItemsControl dark = _home.WallIndex == 0 ? nereusWall1 : nereusWall0;
+      dark.IsEnabled = false;
+      dark.Opacity = 0;
+      standing.IsEnabled = true;
+      // The way-down curve belongs to the wall that went out, not to the one coming in: a host that sank while it
+      // was standing would otherwise rise on the short curve forever after.
+      standing.Classes.Remove(WALL_SINKING_CLASS);
+    }
+
+    /// <summary>
+    /// Asks for the beat that puts the finished wall in the light - once, whatever number of changes asked for it.
+    /// </summary>
+    /// <remarks>
+    /// A wall is put on band by band, and every band is a notification of its own. Answered on the spot, one
+    /// change of entries folded the pane away, raised it on one band, raised it again on two and again on three,
+    /// and asked for the wall's measurement four times over - a wall watched being built, which is the one thing
+    /// this exchange exists to prevent, and three layout passes of a tree that is only finished at the last
+    /// band. So the beat is asked for once and runs when the swapping is through: what it looks at then is the
+    /// wall the viewer is meant to see, and it answers it once. A flip and a no-op ask through the very same
+    /// guard, because the model says so when the standing is through (<see cref="HomeViewModel.WallStood"/>).
+    /// </remarks>
+    private void QueueWallArrival()
+    {
+      if (_wallArrivalQueued)
+        return;
+
+      _wallArrivalQueued = true;
+      Dispatcher.UIThread.Post(PutFinishedWallInLight);
     }
 
     /// <summary>
@@ -1020,7 +1070,9 @@ namespace MediaPortal.Frontend.Views
       // The share of the panel the wall owns is asked for once a wall, not once a band: writing the transform is
       // what tells the screen to measure the whole shelf again, and a band that left the number where it was has
       // no business sending the wall through that.
+      Stopwatch scaling = Stopwatch.StartNew();
       ScaleNereusWall();
+      HomeTrace.Log("wall.scale", scaling.Elapsed.TotalMilliseconds.ToString("F1"));
 
       if (!_home.IsNereusHome)
         return;
@@ -1031,6 +1083,7 @@ namespace MediaPortal.Frontend.Views
         // content simply was not there when no list had items (AbstractHomeContent adds a list only when HasItems),
         // so the whole area took itself off and the fanart showed through. An invisible pane also drops out of the
         // remote's ring - DpadNavigation walks over what cannot take focus.
+        HomeTrace.Log("wall.fold");
         FoldWall();
         return;
       }
@@ -1039,6 +1092,10 @@ namespace MediaPortal.Frontend.Views
       // because writing the light something is already in starts no curve at all - so this is also the beat a
       // refreshed wall takes without flickering.
       RaiseWall();
+
+      // What lies between this beat and the next frames is the price of the wall: the measure and arrange the
+      // transform and the fresh bands asked for, and the drawing of the whole shelf. See HomeTrace.
+      HomeTrace.NextFrames("after-wall");
     }
 
     /// <summary>
@@ -1051,8 +1108,8 @@ namespace MediaPortal.Frontend.Views
       // appears, which is the one thing this exchange exists to prevent. The shorter curve comes off before the
       // light is written, so that the walk up is the wall's own and not the way down played backwards.
       nereusContentPane.IsVisible = true;
-      nereusWallStanding.Classes.Remove(WALL_SINKING_CLASS);
-      nereusWallStanding.Opacity = 1;
+      StandingWall.Classes.Remove(WALL_SINKING_CLASS);
+      StandingWall.Opacity = 1;
 
       // Standing in the light again, so the next step down is a new way down and not the tail of the old one.
       _wallSinking = false;
@@ -1067,8 +1124,8 @@ namespace MediaPortal.Frontend.Views
     {
       nereusContentPane.IsVisible = false;
       nereusContentPane.Offset = new Vector(0, nereusContentPane.Offset.Y);
-      nereusWallStanding.Classes.Remove(WALL_SINKING_CLASS);
-      nereusWallStanding.Opacity = 0;
+      StandingWall.Classes.Remove(WALL_SINKING_CLASS);
+      StandingWall.Opacity = 0;
     }
 
     /// <summary>
@@ -1224,6 +1281,12 @@ namespace MediaPortal.Frontend.Views
       double drawn = _home.ContentGroups.Count > 0
           ? _home.ContentGroups.Max(delegate (HomeContentGroup group) { return group.Height; })
           : 0;
+      // The hosts' Grid would otherwise stand as tall as the taller of the two walls in it, and a wall shorter
+      // than the one parked dark beside it would sit off-centre on the panel. The Grid wears the standing wall's
+      // own drawn height - before the transform, which LayoutTransformControl applies on top of it - and the
+      // dark host's bands simply keep their place in the dark.
+      if (drawn > 0)
+        nereusWallHosts.Height = drawn;
       double panel = Bounds.Height;
       if (drawn <= 0 || panel <= 0)
         return;
@@ -1238,6 +1301,9 @@ namespace MediaPortal.Frontend.Views
         return;
 
       _wallScale = scale;
+      // Writing a transform is the one line here that sends the whole shelf through a measure and an arrange,
+      // so the instrument notes every time it happens - also from the beats that have no wall to put up.
+      HomeTrace.Log("wall.transform", scale.ToString("F4", System.Globalization.CultureInfo.InvariantCulture));
       nereusContentWall.LayoutTransform = new Avalonia.Media.ScaleTransform(scale, scale);
     }
 
@@ -1812,7 +1878,7 @@ namespace MediaPortal.Frontend.Views
       }
 
       // A wall that is going out of the screen is not stood anywhere; only the wall the viewer is reading is.
-      if (tile.Group == null || !nereusWallStanding.GetVisualDescendants().Contains(button))
+      if (tile.Group == null || !StandingWall.GetVisualDescendants().Contains(button))
         return;
 
       // The wall is scrolled by section and not by square. Where the wall stands is decided by the section the
@@ -2147,7 +2213,7 @@ namespace MediaPortal.Frontend.Views
       // wall scaled away from one once stood its last cover flat against the edge of the screen.
       double wallLeft = Math.Max(0, nereusContentWall.Margin.Left);
 
-      foreach (Control? container in nereusWallStanding.GetRealizedContainers())
+      foreach (Control? container in StandingWall.GetRealizedContainers())
       {
         if (container == null || !ReferenceEquals(container.DataContext, band))
           continue;

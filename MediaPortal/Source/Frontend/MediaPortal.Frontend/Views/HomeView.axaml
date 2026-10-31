@@ -20,11 +20,12 @@
         </Transitions>
       </Setter>
     </Style>
-    <!-- The curve a home content wall comes up on: one wall, one picture, and the reading of the next entry's
-         wall goes up complete behind this curve rather than band by band. The way down is put on in the code
-         behind (HomeView.WALL_SINK_MS), because it is a shorter walk than the way up and a styles block can only
-         say one length. Only the wall fades; the pane around it never changes its light. -->
-    <Style Selector="ItemsControl#nereusWallStanding">
+    <!-- The curve a home content wall comes up on: a wall goes up complete behind this curve rather than band by
+         band. The way down is put on in the code behind (HomeView.WALL_SINK_MS), because it is a shorter walk than
+         the way up and a styles block can only say one length. Only the wall fades; the pane around it never
+         changes its light. Both wall hosts wear the class, so a wall that was built in the dark host comes up on
+         exactly this curve when the index flips to it. -->
+    <Style Selector="ItemsControl.nereus-wall">
       <Setter Property="Transitions">
         <Transitions>
           <DoubleTransition Property="Opacity" Duration="0:0:0.45" Easing="CubicEaseOut"/>
@@ -35,7 +36,7 @@
          taken off again on the way up so that the curve above is the one the wall normally wears. The length here
          and HomeView.WALL_SINK_MS are the same number written down twice because a fade has to be waited for at
          least as long as it takes. -->
-    <Style Selector="ItemsControl#nereusWallStanding.wall-sinking">
+    <Style Selector="ItemsControl.nereus-wall.wall-sinking">
       <Setter Property="Transitions">
         <Transitions>
           <DoubleTransition Property="Opacity" Duration="0:0:0.18" Easing="CubicEaseOut"/>
@@ -340,690 +341,707 @@
                       HorizontalScrollBarVisibility="Hidden"
                       VerticalScrollBarVisibility="Disabled"
                       IsVisible="False">
+        <ScrollViewer.Resources>
+          <!-- The bands a wall is made of, written once and worn by either host below: what differs between
+               the two hosts is which entry's groups they hold, never how a band is dressed. -->
+          <DataTemplate x:Key="NereusWallBandTemplate" x:DataType="vm:HomeContentGroup">
+        <Grid Width="{Binding OccupiedWidth}" Height="{Binding BoxHeight}" Margin="0,0,24,0"
+              VerticalAlignment="Top">
+          <TextBlock Text="{Binding Heading}" Classes="home-band-heading"/>
+          <!-- Not clipped, and that is deliberate: this panel is exactly the size of the tiles it holds, so
+               clipping it is a cut along the outside edge of every tile in the row. The shortcut's glass
+               throws its shadow a dozen DIP past that edge, and the covers dress themselves with a shadow
+               of their own; cut at the row's bounds, both of them ended in a straight line a finger's
+               breadth from where the tile's rounding turns, which is the notch in the corner that no
+               setting on the glass could reach because it was never the glass drawing it. Nothing here
+               scrolls and nothing here overflows on purpose - only shadows do. -->
+          <ItemsControl ItemsSource="{Binding Tiles}" x:CompileBindings="False" ClipToBounds="False">
+            <ItemsControl.Styles>
+              <Style Selector="ContentPresenter">
+                <Setter Property="Canvas.Left" Value="{Binding X}"/>
+                <Setter Property="Canvas.Top" Value="{Binding Y}"/>
+              </Style>
+            </ItemsControl.Styles>
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <Canvas Width="{Binding OccupiedWidth}" Height="{Binding BoxHeight}"/>
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:HomeContentTile">
+                <!-- Three kinds of tile, written apart rather than sharing one Button with switches, because
+                     a cover, an icon and a plugin's plaque want different things from the surface they stand
+                     on: a cover wants a plate and a picture filling it, an icon wants the room behind it and
+                     is dressed as glass, and a plugin's plaque wants a ground of the face's own colour with
+                     its picture stretched over it. Apart, the shortcut's glass, its plaque and its morph are
+                     nowhere in a tile that is not one, the plaque of a plugin is nowhere in a cover, and
+                     whoever changes one of them cannot move the other two's numbers by accident. -->
+                <Panel>
+                <!-- The plugin's plaque. Its ground is NereusColorMedium, the middle of the three colours
+                     the viewer's chosen colour family is spelled in (PanelRaisedBrush, tinted by
+                     FrontendTheme), and the plugin's own picture from HomeMenu\<ActionId>.png is STRETCHED
+                     over it rather than cropped to it, because an emblem may lose slack at its sides but not
+                     a wing. Everything else it does, it does exactly like a cover on the same wall: its
+                     button wears the cover's class beside its own, so at rest it holds itself a little
+                     quiet, and a viewer standing on it brings the tile to full light, steps the picture a
+                     tenth nearer and lights the shared edge - and its name stands in the very same fade a
+                     cover's title stands in, not in a plate of its own. Without a picture the plug's own
+                     mark fills in, centred on the ground. -->
+                <Border Classes="home-tile-shadow" IsVisible="{Binding IsPlugin}">
+                <Button Classes="nereus-plugin-tile nereus-content-tile"
+                        Width="{Binding Width}"
+                        Height="{Binding Height}"
+                        Focusable="{Binding IsFocusable}"
+                        Tag="{Binding}"
+                        GotFocus="OnNereusTileGotFocus"
+                        Click="OnNereusTileClick">
+                  <Panel>
+                    <Border Classes="plugin-tile-face" ClipToBounds="True">
+                      <Grid>
+                        <Image Classes="plugin-tile-art home-tile-art"
+                               Source="{Binding MenuEntry.HomeImagePath, Converter={x:Static views:SkinImageConverter.Instance}, ConverterParameter='{}{0}'}"
+                               Stretch="Fill"/>
+                        <!-- no picture for the plugin: the plug's own mark stands centred on the ground,
+                             the way a cover without its poster wears the medium's mark; the parameter
+                             names the icon outright, so no binding value is asked for -->
+                        <Path Data="{Binding Converter={x:Static views:SkinIconGeometryConverter.Instance}, ConverterParameter='Media/extension'}"
+                              Fill="{DynamicResource TextBrush}" Width="90" Height="90" Opacity="0.55"
+                              Stretch="Uniform"
+                              HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-20,0,20"
+                              IsVisible="{Binding MenuEntry.HomeImagePath, Converter={x:Static views:SkinImageMissingConverter.Instance}, ConverterParameter='{}{0}'}"/>
+                        <Border Classes="home-tile-caption"
+                                VerticalAlignment="Bottom"
+                                Padding="8,5,8,10">
+                          <TextBlock Classes="home-tile-caption-title"
+                                     Text="{Binding Label}"
+                                     FontSize="15"
+                                     FontWeight="SemiBold"
+                                     VerticalAlignment="Bottom"
+                                     TextTrimming="CharacterEllipsis"
+                                     MaxLines="2"/>
+                        </Border>
+                      </Grid>
+                    </Border>
+                    <Border Classes="home-tile-edge" IsHitTestVisible="False"/>
+                  </Panel>
+                </Button>
+                </Border>
+
+                <!-- The weather and news card. It answers a standing viewer exactly like a cover and a
+                     plaque on the same wall do - it takes the same shared class, comes up to full light,
+                     and lights the same edge - but it says words rather than wearing a picture: the
+                     reference's own weather and news templates were dressed like media tiles, and a
+                     press of one asked nothing of anybody, so the card keeps Focusable and a click
+                     that opens nothing. Its ground is the plaque's raised face rather than a cover's
+                     dark plate, because a card is written on, not looked through. -->
+                <Border Classes="home-tile-shadow" IsVisible="{Binding IsCard}">
+                <Button Classes="nereus-card-tile nereus-content-tile"
+                        Width="{Binding Width}"
+                        Height="{Binding Height}"
+                        Focusable="{Binding IsFocusable}"
+                        Tag="{Binding}"
+                        GotFocus="OnNereusTileGotFocus"
+                        Click="OnNereusTileClick">
+                  <Panel>
+                    <Border Classes="card-tile-face" ClipToBounds="True">
+                      <Panel>
+                        <!-- Today, as the design redrew it: the temperature biggest, the sky's word
+                             under it, the picture centred, the place under the picture, and every
+                             other reading the endpoint gave in a fact list. The air rides as a small
+                             pill in the corner when it came in. No gradient anywhere - the name of
+                             the place stands in the open, on the same card the numbers stand on. -->
+                        <Panel IsVisible="{Binding Card.IsToday}">
+                          <StackPanel HorizontalAlignment="Stretch" VerticalAlignment="Top"
+                                      Margin="25,7,25,0" Spacing="0">
+                            <TextBlock Classes="card-tile-big" Text="{Binding Card.BigText}"
+                                       HorizontalAlignment="Center"/>
+                            <TextBlock Classes="card-tile-sub" Text="{Binding Card.Sub}"
+                                       FontSize="18" HorizontalAlignment="Center"/>
+                            <Image Classes="home-tile-art"
+                                   Source="{Binding Card.IconName, Converter={x:Static views:SkinImageConverter.Instance}, ConverterParameter='{}{0}'}"
+                                   Stretch="Uniform" Width="200" Height="200" Margin="0,2,0,0"
+                                   HorizontalAlignment="Center"/>
+                            <TextBlock Classes="home-tile-caption-title"
+                                       Text="{Binding Card.Label}" FontSize="24" FontWeight="SemiBold"
+                                       HorizontalAlignment="Center" Margin="0,6,0,0"
+                                       TextWrapping="Wrap" TextAlignment="Center"/>
+                            <ItemsControl ItemsSource="{Binding Card.Facts}" Margin="0,16,0,0">
+                              <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:CardFact">
+                                  <!-- One line of details, and above it the hairline the mockup drew
+                                     over every row - the rows hang under each other like slats. -->
+                                  <Border BorderBrush="#12FFFFFF" BorderThickness="0,1,0,0">
+                                    <Grid ColumnDefinitions="*,Auto" Margin="0,6">
+                                    <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="18"
+                                               Opacity="0.6"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Value}" FontSize="18"/>
+                                    </Grid>
+                                  </Border>
+                                </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                          </StackPanel>
+                        </Panel>
+
+                        <!-- The hours: a legend of its own, then every hour standing in a column
+                             with its name and picture, then the chart - red temperature, light blue
+                             chance, light blue millimetre bars - drawn by its own control. The
+                             control's columns and this row's share their centres because both cut
+                             the width into the same equal columns. -->
+                        <DockPanel Margin="14,10,14,6" IsVisible="{Binding Card.IsChart}">
+                          <StackPanel Orientation="Horizontal" Spacing="18" DockPanel.Dock="Top"
+                                      HorizontalAlignment="Right" Margin="0,0,0,4">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                              <Border Width="18" Height="6" Background="#ff6a55" CornerRadius="3"
+                                      VerticalAlignment="Center"/>
+                              <TextBlock Text="temperature" FontSize="18" Opacity="0.8"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                              <Border Width="18" Height="6" Background="#7fd0f7" CornerRadius="3"
+                                      VerticalAlignment="Center"/>
+                              <TextBlock Text="rain chance" FontSize="18" Opacity="0.8"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                              <Border Width="14" Height="10" Background="#7fd0f7" CornerRadius="2"
+                                      VerticalAlignment="Center"/>
+                              <TextBlock Text="mm" FontSize="18" Opacity="0.8"/>
+                            </StackPanel>
+                          </StackPanel>
+                          <ItemsControl ItemsSource="{Binding Card.Slots}" DockPanel.Dock="Top">
+                            <ItemsControl.ItemsPanel>
+                              <ItemsPanelTemplate>
+                                <UniformGrid Rows="1"/>
+                              </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="api:WeatherSlot">
+                                <StackPanel Spacing="2" HorizontalAlignment="Center">
+                                  <TextBlock Text="{Binding Time, StringFormat=\{0:HH:mm\}}"
+                                             FontSize="30" FontWeight="SemiBold"
+                                             HorizontalAlignment="Center"/>
+                                  <Image Source="{Binding Icon, Converter={x:Static views:SkinImageConverter.Instance}, ConverterParameter='Weather/128x128/{0}'}"
+                                         Width="92" Height="92" Stretch="Uniform"/>
+                                </StackPanel>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                          <views:WeatherChartControl Slots="{Binding Card.Slots}"/>
+                        </DockPanel>
+
+                        <!-- A day of the forecast, narrow as the design asked: the day's name, its
+                             picture between name and numbers, the swing in one line, and the rain
+                             in two of its own - how likely, how much. -->
+                        <StackPanel IsVisible="{Binding Card.IsDayFace}" Spacing="6"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Margin="8,6,8,6">
+                          <TextBlock Classes="home-tile-caption-title" Text="{Binding Card.Label}"
+                                     FontSize="24" FontWeight="SemiBold"
+                                     HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                     MaxLines="1"/>
+                          <Image Classes="home-tile-art"
+                                 Source="{Binding Card.IconName, Converter={x:Static views:SkinImageConverter.Instance}, ConverterParameter='{}{0}'}"
+                                 Stretch="Uniform" Width="110" Height="110"
+                                 HorizontalAlignment="Center"/>
+                          <TextBlock Text="{Binding Card.Detail}" FontSize="22"
+                                     HorizontalAlignment="Center"/>
+                          <!-- Three readings, three rows: the hairlines between temperature, chance,
+                               and millimetres are the same slats the current card's facts hang under. -->
+                          <Border BorderBrush="#12FFFFFF" BorderThickness="0,1,0,0">
+                            <TextBlock Text="{Binding Card.Sub}" FontSize="20" Opacity="0.85"
+                                       TextAlignment="Center" HorizontalAlignment="Center"
+                                       Margin="0,5,0,0"/>
+                          </Border>
+                          <Border BorderBrush="#12FFFFFF" BorderThickness="0,1,0,0">
+                            <TextBlock Text="{Binding Card.Sub2}" FontSize="20" Opacity="0.85"
+                                       TextAlignment="Center" HorizontalAlignment="Center"
+                                       Margin="0,5,0,0"/>
+                          </Border>
+                        </StackPanel>
+
+                        <!-- Air and radar on one card: the rain picture of the region above (asked
+                             of the internet by the picture itself), the index as a huge figure in
+                             its own colour under the caption, the named pollutants in a fact list,
+                             and the card's name plain at the bottom - no gradient, as everywhere
+                             on this wall. -->
+                        <DockPanel Margin="20,18,20,14" IsVisible="{Binding Card.IsAir}">
+                          <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                            <TextBlock Classes="home-tile-caption-title"
+                                       Text="{Binding Card.Label}" FontSize="15" FontWeight="SemiBold"/>
+                            <TextBlock Classes="card-tile-detail" Text="{Binding Card.Detail}"
+                                       TextAlignment="Left" FontSize="13" Opacity="0.75"
+                                       TextTrimming="CharacterEllipsis" MaxLines="1"/>
+                          </StackPanel>
+                          <Border DockPanel.Dock="Top" Height="280" CornerRadius="10"
+                                  ClipToBounds="True" Background="#FF1D2733"
+                                  IsVisible="{Binding Card.HasRadar}">
+                            <views:HttpImage Url="{Binding Card.RadarUrl}" Stretch="UniformToFill"/>
+                          </Border>
+                          <StackPanel DockPanel.Dock="Top" Margin="0,8,0,0"
+                                     IsVisible="{Binding Card.HasRadar}">
+                            <TextBlock Text="Rain radar" FontSize="15" FontWeight="SemiBold"/>
+                            <TextBlock Text="now &#183; refreshes with the wall" FontSize="13"
+                                       Opacity="0.7"/>
+                          </StackPanel>
+                          <StackPanel Margin="0,14,0,0" Spacing="2"
+                                      IsVisible="{Binding Card.Air, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+                            <StackPanel Orientation="Horizontal" Spacing="14">
+                              <TextBlock Text="{Binding Card.AqiNumber}" FontSize="90"
+                                         FontWeight="SemiBold" Foreground="{Binding Card.AqiBrush}"
+                                         VerticalAlignment="Center"/>
+                              <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Card.AqiGrade}" FontSize="24"/>
+                                <TextBlock Text="air quality index" FontSize="14" Opacity="0.6"/>
+                              </StackPanel>
+                            </StackPanel>
+                            <ItemsControl ItemsSource="{Binding Card.Facts}" Margin="0,10,0,0">
+                              <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:CardFact">
+                                  <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                                    <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="15"
+                                               Opacity="0.6"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Value}" FontSize="15"/>
+                                  </Grid>
+                                </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                          </StackPanel>
+                        </DockPanel>
+
+                        <!-- A feed's square, as the mockup drew it: the feed's own mark in the
+                             middle - channel image or favicon, asked by the tile itself, with the
+                             feed's initial painted behind it so a square is never faceless - the
+                             name under the mark, and how many it handed over under the name. Its
+                             ground and frame are the weather tiles' glass, unchanged. -->
+                        <Panel IsVisible="{Binding Card.IsFeedTile}">
+                          <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                                      Spacing="12">
+                             <Panel Width="88" Height="88" HorizontalAlignment="Center">
+                               <Border Background="#24FFFFFF" CornerRadius="44"
+                                       IsVisible="{Binding Card.NoLogo}">
+                                <TextBlock Text="{Binding Card.Glyph}" FontSize="38"
+                                           FontWeight="SemiBold" HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                              </Border>
+                              <views:HttpImage Url="{Binding Card.LogoUrl}" Width="88" Height="88"
+                                               DecodeWidth="132" Stretch="Uniform"/>
+                            </Panel>
+                            <TextBlock Text="{Binding Card.Label}" FontSize="19" FontWeight="SemiBold"
+                                       HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                       MaxLines="1"/>
+                            <TextBlock Text="{Binding Card.Detail}" FontSize="14" Opacity="0.55"
+                                       HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                       MaxLines="2" TextAlignment="Center"/>
+                          </StackPanel>
+                        </Panel>
+
+                        <!-- A headline standing on its story's own picture: the photograph full
+                             bleed, a veil so the words stay readable on whatever the sky in the
+                             picture happens to be, the feed's mark in a chip where a thumbnail
+                             would not be in the way, and the words at the bottom in the same
+                             place a cover's title stands. The big places tell the story too. -->
+                        <Panel IsVisible="{Binding Card.IsNewsPicture}">
+                          <views:HttpImage Url="{Binding Card.ImageUrl}" Stretch="UniformToFill"
+                                           DecodeWidth="512"/>
+                          <Border>
+                            <Border.Background>
+                              <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                <GradientStop Offset="0.30" Color="#00000000"/>
+                                <GradientStop Offset="0.62" Color="#8C000000"/>
+                                <GradientStop Offset="1.00" Color="#D9000000"/>
+                              </LinearGradientBrush>
+                            </Border.Background>
+                          </Border>
+                          <Border Background="#6B000000" CornerRadius="12" Padding="7,4,10,4"
+                                  Margin="10,10,0,0" HorizontalAlignment="Left"
+                                  VerticalAlignment="Top">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                              <Panel Width="18" Height="18">
+                                <Border Background="#40FFFFFF" CornerRadius="9"
+                                        IsVisible="{Binding Card.NoLogo}">
+                                  <TextBlock Text="{Binding Card.Glyph}" FontSize="10"
+                                             FontWeight="Bold" HorizontalAlignment="Center"
+                                             VerticalAlignment="Center"/>
+                                </Border>
+                                <views:HttpImage Url="{Binding Card.LogoUrl}" Width="18" Height="18"
+                                                 DecodeWidth="36" Stretch="Uniform"/>
+                              </Panel>
+                              <TextBlock Text="{Binding Card.FeedName}" FontSize="12"
+                                         VerticalAlignment="Center"/>
+                            </StackPanel>
+                          </Border>
+                          <StackPanel Margin="14,0,14,12" VerticalAlignment="Bottom" Spacing="5">
+                            <TextBlock Text="{Binding Card.Label}" FontWeight="SemiBold"
+                                       FontSize="24" MaxLines="3" TextWrapping="Wrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       IsVisible="{Binding Card.Hero}"/>
+                            <TextBlock Text="{Binding Card.Label}" FontWeight="SemiBold"
+                                       FontSize="15" MaxLines="2" TextWrapping="Wrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       IsVisible="{Binding Card.NotHero}"/>
+                            <TextBlock Text="{Binding Card.Story}" FontSize="13" Opacity="0.8"
+                                       MaxLines="2" TextWrapping="Wrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       IsVisible="{Binding Card.Hero}"/>
+                            <TextBlock Text="{Binding Card.Detail}" FontSize="12" Opacity="0.65"
+                                       TextTrimming="CharacterEllipsis" MaxLines="1"/>
+                          </StackPanel>
+                        </Panel>
+
+                        <!-- A headline whose feed named no picture: the words themselves on the
+                             wall's own glass - the weather tiles' ground and frame, untouched -
+                             the title, the story under a hairline the way the fact rows hang
+                             under each other, and the when at the bottom of the square. -->
+                        <DockPanel Margin="14,12,14,12" IsVisible="{Binding Card.IsNewsWords}">
+                          <TextBlock DockPanel.Dock="Bottom" Text="{Binding Card.Detail}"
+                                     FontSize="11.5" Opacity="0.55" Margin="0,8,0,0"
+                                     TextTrimming="CharacterEllipsis" MaxLines="1"/>
+                          <StackPanel Spacing="0">
+                            <TextBlock Text="{Binding Card.Label}" FontSize="16" FontWeight="SemiBold"
+                                       TextWrapping="Wrap" MaxLines="4"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <Border BorderBrush="#12FFFFFF" BorderThickness="0,1,0,0" Margin="0,8,0,0"
+                                    IsVisible="{Binding Card.HasStory}">
+                              <TextBlock Text="{Binding Card.Story}" FontSize="12" Opacity="0.7"
+                                         Margin="0,8,0,0" TextWrapping="Wrap" MaxLines="4"
+                                         TextTrimming="CharacterEllipsis"/>
+                            </Border>
+                          </StackPanel>
+                        </DockPanel>
+
+                        <!-- Every other card - none of the walls has one since the news squares
+                             got their own faces - keeps the face it always wore: the big number
+                             top left, the picture's place, the news mark, and the name in the
+                             shared fade. -->
+                        <Panel IsVisible="{Binding Card.IsPlain}" Background="{DynamicResource PanelRaisedBrush}">
+                        <!-- The big number and its small lines, top left, as the reference's today-card
+                             drew them. A card without a big number leaves this whole stack empty - an
+                             empty TextBlock asks for no room, so no row has to be hidden by hand. -->
+                        <StackPanel Orientation="Vertical" Spacing="4" Margin="22,18,110,0"
+                                    HorizontalAlignment="Left" VerticalAlignment="Top">
+                          <TextBlock Classes="card-tile-big" Text="{Binding Card.BigText}"/>
+                          <TextBlock Classes="card-tile-sub" Text="{Binding Card.Sub}"/>
+                        </StackPanel>
+                        <!-- The sky itself, right of the numbers - the reference drew today's picture
+                             three hundred wide at 1080; off the wall's own scale here. -->
+                        <Image Classes="home-tile-art"
+                               Source="{Binding Card.IconName, Converter={x:Static views:SkinImageConverter.Instance}, ConverterParameter='{}{0}'}"
+                               Stretch="Uniform" MaxWidth="220" MaxHeight="220"
+                               Margin="0,30,26,0"
+                               HorizontalAlignment="Right" VerticalAlignment="Top"
+                               IsVisible="{Binding Card.HasRightIcon}"/>
+                        <!-- A day's or a feed's picture, alone in the middle above the title band -
+                             the reference's BigIcon measure; the margins leave the band's room free. -->
+                        <Image Classes="home-tile-art"
+                               Source="{Binding Card.IconName, Converter={x:Static views:SkinImageConverter.Instance}, ConverterParameter='{}{0}'}"
+                               Stretch="Uniform"
+                               Margin="24,24,24,90"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               IsVisible="{Binding Card.HasCenteredIcon}"/>
+                        <!-- The news mark where a thumbnail would stand, top right, as the reference's
+                             TopNews template stamped it. -->
+                        <Image Source="{Binding Card.BadgeName, Converter={x:Static views:SkinImageConverter.Instance}, ConverterParameter='{}{0}'}"
+                               Width="40" Height="40" Stretch="Uniform"
+                               Margin="0,10,10,0"
+                               HorizontalAlignment="Right" VerticalAlignment="Top"
+                               IsVisible="{Binding Card.HasBadge}"/>
+                        <!-- The card's name in the very same fade a cover's title stands in, with the
+                             small line the reference's templates carried under the name. -->
+                        <Border Classes="home-tile-caption"
+                                VerticalAlignment="Bottom"
+                                Padding="8,5,8,10">
+                          <StackPanel Orientation="Vertical">
+                            <TextBlock Classes="card-tile-detail"
+                                       Text="{Binding Card.Detail}"
+                                       TextTrimming="CharacterEllipsis"
+                                       MaxLines="2"/>
+                            <TextBlock Classes="home-tile-caption-title"
+                                       Text="{Binding Label}"
+                                       FontSize="15"
+                                       FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis"
+                                       MaxLines="2"/>
+                          </StackPanel>
+                        </Border>
+                        </Panel>
+                      </Panel>
+                    </Border>
+                    <Border Classes="home-tile-edge" IsHitTestVisible="False"/>
+                  </Panel>
+                </Button>
+                </Border>
+
+                <!-- Two surfaces, because a shadow cannot live on a clipped edge: the outer one is the
+                     ground the tile stands on and casts its BoxShadow (which must fall outside its own
+                     edges, so it clips nothing), the inner one is the face the picture stands on and
+                     does the clipping. Both are dressed by the worn skin's styles, not here. -->
+                <Border Classes="home-tile-shadow" IsVisible="{Binding IsCover}">
+                <Button Classes="nereus-content-tile"
+                        Width="{Binding Width}"
+                        Height="{Binding Height}"
+                        Focusable="{Binding IsFocusable}"
+                        Tag="{Binding}"
+                        GotFocus="OnNereusTileGotFocus"
+                        Click="OnNereusTileClick">
+                  <Panel>
+                  <Border Classes="home-tile-face" ClipToBounds="True">
+                  <Grid>
+                    <!-- Nothing frosts here. A cover whose artwork is missing or still arriving used to frost
+                         the piece of wall behind it the way the shortcut glass does, and that was the single
+                         most expensive thing on the home screen: the glass samples the backdrop and blurs
+                         it in software, once per surface per frame, and a wall arrives with seventeen to
+                         twenty-four covers whose posters have all not landed yet - so every frame of the way
+                         up cost one blurred backdrop per cover standing without a picture. Measured over
+                         eight switches at 3440x1440, taking this one surface away cut the frames slower than
+                         40 ms from 51 to 32 and their summed time from 5140 ms to 3265 ms, which is all of
+                         the frosting's cost - the shortcut glass beside it measures as nothing, and it
+                         measured as nothing wearing liquid glass too (the same median frame time and the
+                         same p95 over eight switches), which is why it keeps its glass and this does not.
+                         What a cover without a
+                         picture stands on is the tile's own dark plate, the same #222222 the faces have
+                         always had, for the moment its poster is on its way. The reference never frosted
+                         anything here - Nereus shipped no blur at all (NereusSkinSettings.FanartBlur says
+                         so where the dial is explained) - so the plate is the worn skin's own picture too. -->
+                    <!-- The cover, decoded the width the wall draws it at. A poster out of the fanart cache
+                         is a 2000x3000 scan, and a wall realises its seventeen to nineteen covers in one
+                         beat: decoded whole, that is a twenty-four megabyte allocation per cover on the
+                         thread that draws, and the picture cache cannot hold a wall of them, so every step
+                         along the menu decoded the whole wall again. Six hundred and forty pixels is the
+                         widest place a cover has on a band - the two by two at its head - with the room the
+                         focus morph steps into; see ArtworkConverter.WALL_DECODE_WIDTH for the arithmetic. -->
+                    <Image Classes="home-tile-art"
+                           Source="{Binding Title.Artwork, Converter={x:Static views:ArtworkConverter.Instance}, ConverterParameter=wall}"
+                           Stretch="UniformToFill"
+                           IsVisible="{Binding IsTitle}"/>
+                    <!-- no poster (and none on its way): the medium's mark stands on the plate, in the
+                         same three spells as every media tile's fallback - audio, image or video -->
+                    <Path Data="{Binding Title.FallbackIcon, Converter={x:Static views:SkinIconGeometryConverter.Instance}}"
+                          Fill="{DynamicResource TextBrush}" Width="70" Height="70" Opacity="0.55"
+                          Stretch="Uniform"
+                          HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-16,0,0"
+                          IsVisible="{Binding Title.HasNoArtwork}"/>
+                    <Border Classes="home-tile-caption"
+                            VerticalAlignment="Bottom"
+                            Padding="8,5,8,10">
+                      <TextBlock Classes="home-tile-caption-title"
+                                 Text="{Binding Label}"
+                                 FontSize="15"
+                                 FontWeight="SemiBold"
+                                 VerticalAlignment="Bottom"
+                                 TextTrimming="CharacterEllipsis"
+                                 MaxLines="2"/>
+                    </Border>
+                  </Grid>
+                  </Border>
+                  <!-- The frame, laid over the edge of the face and not around it: the same ring the
+                       shortcut glass wears (one class, one set of numbers, brightened by the same
+                       rule), drawn after the face so the face's own clip cannot saw off its outer half.
+                       This tile used to answer focus with a hard four pixel white frame of its own; that
+                       frame is gone, and what a viewer sees now is the ghost edge coming up to full light
+                       on the tile they stand on. Out of the pointer's way, because the Button is what
+                       gets stood on. -->
+                  <Border Classes="home-tile-edge" IsHitTestVisible="False"/>
+                  </Panel>
+                </Button>
+                </Border>
+
+                <!-- The shortcut, as glass. Glass is not a white rectangle with an icon on it: it lets the
+                     picture behind it through, out of focus and bent where its rim curves into the wall,
+                     it has body, and it has an edge that catches the light. So the tile lenses the screen
+                     itself behind it - the piece of the wall standing behind THIS tile - through a shader,
+                     with the veil of the glass over that lens and
+                     the glyph on top of the veil, standing centred on the tile with no box around it at
+                     all. The frame is a gradient rather than one flat line because a glass edge is bright
+                     where it catches the light and dark where it does not. Standing on the tile lifts its
+                     background lighter, brings the edge up from a ghost to full light and draws the
+                     outline of the glyph round the icon; nothing travels across the glass, nothing zooms,
+                     the corner stays the corner, and no band lies across the bottom of the frame. Every number of this - how deep the blur, how much veil,
+                     how bright the edge - lives either here on the glass surface or in styles.xaml. -->
+                <!-- Out of the glass's own backdrop, on purpose and for every one of them at once.
+
+                     A liquid glass surface is handed no framebuffer to sample: the library walks this
+                     window's own visual tree and draws it once into a bitmap, and it leaves each
+                     surface's own subtree out of that walk - each surface's OWN, no more. Five of these
+                     tiles stand side by side in a rail, so every one of them lensed its neighbours'
+                     finished glass, bent that again, and handed the result back to the neighbours for the
+                     next capture. Every round trip adds the tint's white and the vibrancy's lift, so a
+                     rail of these left standing a while drifts to a pale plate: not a rounding problem,
+                     not a clip problem, and not anything a fresh frame would show - which is why it looked
+                     fine in a screenshot taken straight after a start and wrong after that.
+
+                     Excluded, a tile bends the wall and the artwork behind it and nothing else, which is
+                     what glass does, and the loop has no way to close. -->
+                <!-- The same ground the covers stand on: the shared Border.home-tile-shadow, so a shortcut
+                     is laid on the wall by the one BoxShadow the skin knows and not by a second shadow of
+                     the glass's own invention. The border is transparent - it carries the shadow and
+                     nothing else - and the glass sits in it as the cover's face sits in its own. -->
+                <Border Classes="home-tile-shadow" IsVisible="{Binding IsShortcut}">
+                <Button Classes="nereus-shortcut-tile"
+                        lg:LiquidGlassBackdrop.IsExcludedFromCapture="True"
+                        IsVisible="{Binding IsShortcut}"
+                        Width="{Binding Width}"
+                        Height="{Binding Height}"
+                        Focusable="{Binding IsFocusable}"
+                        Tag="{Binding}"
+                        GotFocus="OnNereusTileGotFocus"
+                        Click="OnNereusTileClick">
+                  <Panel>
+                    <!-- ONE surface for the glass itself: the lens and its rounding are drawn by this
+                         one surface, and the frame is a ring laid over its edge afterwards. The shadow it
+                         stands away from the wall on is deliberately NOT its own - the tile wears the
+                         skin's shared Border.home-tile-shadow, wrapped round this Button above - because
+                         every other tile on the wall is laid down by that one shadow, and a shortcut
+                         casting a shadow of its own invention sat in a darkness none of its neighbours had.
+
+                         It took three attempts to see why anything else fails. Two roundings cannot be
+                         right: the face was rounded at ten while the surface, inset by the frame's own
+                         three, was rounded at seven or eight, and where the two circles disagree a viewer
+                         sees a step in the corner - which is the artifact that survived every clip I
+                         moved around, because clipping was never the problem, the two circles were.
+
+                         So the surface rounds at the tile's own ten and bends within that path, and it
+                         casts nothing of its own: ShadowEnabled is off. A shader shadow laid next to the
+                         skin's BoxShadow is two shadows under one tile, and the shadow that belongs to a
+                         tile is the one every cover on the wall already wears - round at the same ten, so
+                         the two agree about where the edge is. Nothing outside the glass clips either: the
+                         shadow falls outside the tile's bounds, and the ring on top is drawn at the same
+                         ten, so it covers the seam of the edge rather than fighting it, and it is out of
+                         the way of the pointer because the Button is what gets stood on. The glass itself
+                         does clip, and the reason is written below where the surface stands.
+
+                         Two things a photograph of the running screen taught about this surface, both of
+                         them against the obvious setting:
+
+                         The shadow was there and invisible, because it falls outside the surface's bounds
+                         while the Button it stands in is 159x159 - exactly the tile - and clips, as does
+                         the row of tiles around it. Every pixel of a shadow that lies outside the tile was
+                         being sawn off by those two cuts, and no amount of deepening it could show
+                         through - which is also where the notch in the tile's bottom corners came from, a
+                         shadow ending in a straight line a finger's breadth before its rounding turns.
+                         Neither clips any more (see the row above and the tile's style in styles.xaml),
+                         and that - not any number written on the glass - is what lets the tile's shadow
+                         reach past the tile.
+
+                         The plate going white was the same kind of mistake on the other side of the glass.
+                         TintColor is not a wash laid over the frost: the library puts it down once at full
+                         alpha in the Hue blend mode and once more as a fill, so a near-white tint is a
+                         full-strength wash over everything behind the pane. A veil meant to sit inside the
+                         glass therefore goes through SurfaceColor - one ordinary fill at its own alpha,
+                         dark here, so the glass is darker than the wall it covers and reads as smoke
+                         rather than as card. -->
+                    <!-- ONE glass, and it is liquid glass. The tile knew one other glass until now - the
+                         frost, a strip of the screen behind it taken away out of focus and lifted - and
+                         that frost is gone: what bends the wall here bends it as a lens does, taking the
+                         backdrop out of focus, curving it where the rim of the tile curves into the wall,
+                         pulling that bend apart into its colours by a hair's breadth and letting a light
+                         run along the rim. None of that is a blur, so it was never a dial of the frost
+                         turned further, and a tile wearing both at once is frosted AND lensed, which is
+                         not a glass anyone chose.
+
+                         What the lens costs is a second drawing of this window, described two comments up.
+                         Measured over eight menu switches at 3440x1440 against the frost it replaced, the
+                         median frame time and the p95 came out the same, and the slow frames came out the
+                         same; that is why there is no switch in front of it and why the frost left rather
+                         than staying behind a setting.
+
+                         The face of the tile - veil, glyph, name - stands OUT of the glass, as its
+                         sibling in this Panel and painted after it, so that the order stays what it
+                         always was: glass, veil, glyph, name, and the ring over the seam. -->
+                    <!-- Round at the tile's own ten, the same veil and the same lift the tile always had,
+                         and the library's own answer to what a lens of this size wants for its bend and
+                         its dispersion, opened up until the lens is actually seen. The light along the rim
+                         is fainter than the library draws it, because at its own opacity that light reads
+                         as a frame laid over the tile rather than as glass. The shadow stays off for the
+                         reason three paragraphs up - the tile is laid on the wall by the skin's one
+                         BoxShadow, and a second shadow under the same tile is a tile sitting in a darkness
+                         none of its neighbours have.
+
+                         ClipToBounds is put back on by hand. The library turns it off in the surface's
+                         statics, because a glass that casts its own shadow has to let that shadow
+                         leave the control, and this tile does not cast its own - so the one reason
+                         that margin exists is taken away here, and the margin is what was left
+                         painting: five tiles standing twelve pixels apart came out of the first live
+                         run as one plate, ring and gap together under one pane. Clipped, the lens
+                         still samples outside its edge (that is what a lens does) and paints inside
+                         it, which is all the rail has room for. The width and the position are
+                         asserted in Tests.Frontend, because a plate is exactly as wide as the
+                         shortcut row and a screenshot of it looks tidy at a glance. -->
+                    <lg:LiquidGlassSurface Classes="home-shortcut-liquid"
+                                           ClipToBounds="True"
+                                           CornerRadius="10"
+                                           BlurRadius="10"
+                                           Vibrancy="1.15"
+                                           SurfaceColor="#33030810"
+                                           RefractionHeight="20"
+                                           RefractionAmount="45"
+                                           DepthEffect="True"
+                                           ChromaticAberration="True"
+                                           HighlightWidth="0.5"
+                                           HighlightOpacity="0.2"
+                                           ShadowEnabled="False"/>
+                    <!-- The tint of the glass itself, laid over the lens. -->
+                    <Border Classes="home-shortcut-tint"/>
+                    <!-- The glyph stands on the glass, centred above the name, eight-tenths of
+                         its old half-width - its own box, no box around it. It is a shape rather
+                         than a picture, so the tile decides its colour and its state. -->
+                    <Path Classes="home-shortcut-glyph"
+                          Width="{Binding IconSize}"
+                          Height="{Binding IconSize}"
+                          Stretch="Uniform"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Data="{Binding IconName, Converter={x:Static views:SkinIconGeometryConverter.Instance}, ConverterParameter='{}{0}'}"/>
+                    <!-- The name, on the glass and not on a band: a band is a rectangle, and a
+                         rectangle inside a rounded frame lies across the frame's corners. -->
+                    <TextBlock Classes="home-shortcut-caption"
+                               Text="{Binding Label}"
+                               TextTrimming="CharacterEllipsis"/>
+                    <!-- The frame, laid OVER the edge of the glass rather than around it: a ring, and
+                         nothing else - no background, no clip - because the glass beneath it has already
+                         decided where its edge is, at the very same ten. Laid over that edge the ring
+                         hides the seam of the cut instead of arguing with it, and it stays out of the
+                         pointer's way because the Button is what a viewer stands on. -->
+                    <Border Classes="home-tile-edge" IsHitTestVisible="False"/>
+                  </Panel>
+                </Button>
+                </Border>
+                </Panel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </Grid>
+          </DataTemplate>
+        </ScrollViewer.Resources>
           <!-- The wall is one thing that scales: the code-behind puts a LayoutTransform on this control so the
                whole shelf - headings, tiles and their gaps - grows to the share of the panel the worn skin asks
                for (HomeWallHeightRatio, 0.8 of the height under Nereus), and stands it centred in that panel
                rather than hanging it under the header row the reference drew. -->
           <LayoutTransformControl Name="nereusContentWall" VerticalAlignment="Center">
-          <!-- One wall, and only ever one: the wall the viewer is looking at. What an entry's wall is replaced
-               with is read somewhere the screen cannot see and goes up whole (HomeViewModel.ReadWallAsync), after
-               this one has been walked down to dark - two walls on the screen at once would mean drawing every
-               glass tile, shadow and cover twice, which is exactly what makes a switch stumble. -->
-          <ItemsControl Name="nereusWallStanding" ItemsSource="{Binding ContentGroups}">
-            <ItemsControl.ItemsPanel>
-              <ItemsPanelTemplate>
-                <StackPanel Orientation="Horizontal"/>
-              </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="vm:HomeContentGroup">
-                <Grid Width="{Binding OccupiedWidth}" Height="{Binding BoxHeight}" Margin="0,0,24,0"
-                      VerticalAlignment="Top">
-                  <TextBlock Text="{Binding Heading}" Classes="home-band-heading"/>
-                  <!-- Not clipped, and that is deliberate: this panel is exactly the size of the tiles it holds, so
-                       clipping it is a cut along the outside edge of every tile in the row. The shortcut's glass
-                       throws its shadow a dozen DIP past that edge, and the covers dress themselves with a shadow
-                       of their own; cut at the row's bounds, both of them ended in a straight line a finger's
-                       breadth from where the tile's rounding turns, which is the notch in the corner that no
-                       setting on the glass could reach because it was never the glass drawing it. Nothing here
-                       scrolls and nothing here overflows on purpose - only shadows do. -->
-                  <ItemsControl ItemsSource="{Binding Tiles}" x:CompileBindings="False" ClipToBounds="False">
-                    <ItemsControl.Styles>
-                      <Style Selector="ContentPresenter">
-                        <Setter Property="Canvas.Left" Value="{Binding X}"/>
-                        <Setter Property="Canvas.Top" Value="{Binding Y}"/>
-                      </Style>
-                    </ItemsControl.Styles>
-                    <ItemsControl.ItemsPanel>
-                      <ItemsPanelTemplate>
-                        <Canvas Width="{Binding OccupiedWidth}" Height="{Binding BoxHeight}"/>
-                      </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                      <DataTemplate x:DataType="vm:HomeContentTile">
-                        <!-- Three kinds of tile, written apart rather than sharing one Button with switches, because
-                             a cover, an icon and a plugin's plaque want different things from the surface they stand
-                             on: a cover wants a plate and a picture filling it, an icon wants the room behind it and
-                             is dressed as glass, and a plugin's plaque wants a ground of the face's own colour with
-                             its picture stretched over it. Apart, the shortcut's glass, its plaque and its morph are
-                             nowhere in a tile that is not one, the plaque of a plugin is nowhere in a cover, and
-                             whoever changes one of them cannot move the other two's numbers by accident. -->
-                        <Panel>
-                        <!-- The plugin's plaque. Its ground is NereusColorMedium, the middle of the three colours
-                             the viewer's chosen colour family is spelled in (PanelRaisedBrush, tinted by
-                             FrontendTheme), and the plugin's own picture from HomeMenu\<ActionId>.png is STRETCHED
-                             over it rather than cropped to it, because an emblem may lose slack at its sides but not
-                             a wing. Everything else it does, it does exactly like a cover on the same wall: its
-                             button wears the cover's class beside its own, so at rest it holds itself a little
-                             quiet, and a viewer standing on it brings the tile to full light, steps the picture a
-                             tenth nearer and lights the shared edge - and its name stands in the very same fade a
-                             cover's title stands in, not in a plate of its own. Without a picture the plug's own
-                             mark fills in, centred on the ground. -->
-                        <Border Classes="home-tile-shadow" IsVisible="{Binding IsPlugin}">
-                        <Button Classes="nereus-plugin-tile nereus-content-tile"
-                                Width="{Binding Width}"
-                                Height="{Binding Height}"
-                                Focusable="{Binding IsFocusable}"
-                                Tag="{Binding}"
-                                GotFocus="OnNereusTileGotFocus"
-                                Click="OnNereusTileClick">
-                          <Panel>
-                            <Border Classes="plugin-tile-face" ClipToBounds="True">
-                              <Grid>
-                                <Image Classes="plugin-tile-art home-tile-art"
-                                       Source="{Binding MenuEntry.HomeImagePath, Converter={x:Static views:SkinImageConverter.Instance}, ConverterParameter='{}{0}'}"
-                                       Stretch="Fill"/>
-                                <!-- no picture for the plugin: the plug's own mark stands centred on the ground,
-                                     the way a cover without its poster wears the medium's mark; the parameter
-                                     names the icon outright, so no binding value is asked for -->
-                                <Path Data="{Binding Converter={x:Static views:SkinIconGeometryConverter.Instance}, ConverterParameter='Media/extension'}"
-                                      Fill="{DynamicResource TextBrush}" Width="90" Height="90" Opacity="0.55"
-                                      Stretch="Uniform"
-                                      HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-20,0,20"
-                                      IsVisible="{Binding MenuEntry.HomeImagePath, Converter={x:Static views:SkinImageMissingConverter.Instance}, ConverterParameter='{}{0}'}"/>
-                                <Border Classes="home-tile-caption"
-                                        VerticalAlignment="Bottom"
-                                        Padding="8,5,8,10">
-                                  <TextBlock Classes="home-tile-caption-title"
-                                             Text="{Binding Label}"
-                                             FontSize="15"
-                                             FontWeight="SemiBold"
-                                             VerticalAlignment="Bottom"
-                                             TextTrimming="CharacterEllipsis"
-                                             MaxLines="2"/>
-                                </Border>
-                              </Grid>
-                            </Border>
-                            <Border Classes="home-tile-edge" IsHitTestVisible="False"/>
-                          </Panel>
-                        </Button>
-                        </Border>
-
-                        <!-- The weather and news card. It answers a standing viewer exactly like a cover and a
-                             plaque on the same wall do - it takes the same shared class, comes up to full light,
-                             and lights the same edge - but it says words rather than wearing a picture: the
-                             reference's own weather and news templates were dressed like media tiles, and a
-                             press of one asked nothing of anybody, so the card keeps Focusable and a click
-                             that opens nothing. Its ground is the plaque's raised face rather than a cover's
-                             dark plate, because a card is written on, not looked through. -->
-                        <Border Classes="home-tile-shadow" IsVisible="{Binding IsCard}">
-                        <Button Classes="nereus-card-tile nereus-content-tile"
-                                Width="{Binding Width}"
-                                Height="{Binding Height}"
-                                Focusable="{Binding IsFocusable}"
-                                Tag="{Binding}"
-                                GotFocus="OnNereusTileGotFocus"
-                                Click="OnNereusTileClick">
-                          <Panel>
-                            <Border Classes="card-tile-face" ClipToBounds="True">
-                              <Panel>
-                                <!-- Today, as the design redrew it: the temperature biggest, the sky's word
-                                     under it, the picture centred, the place under the picture, and every
-                                     other reading the endpoint gave in a fact list. The air rides as a small
-                                     pill in the corner when it came in. No gradient anywhere - the name of
-                                     the place stands in the open, on the same card the numbers stand on. -->
-                                <Panel IsVisible="{Binding Card.IsToday}">
-                                  <StackPanel HorizontalAlignment="Stretch" VerticalAlignment="Top"
-                                              Margin="25,7,25,0" Spacing="0">
-                                    <TextBlock Classes="card-tile-big" Text="{Binding Card.BigText}"
-                                               HorizontalAlignment="Center"/>
-                                    <TextBlock Classes="card-tile-sub" Text="{Binding Card.Sub}"
-                                               FontSize="18" HorizontalAlignment="Center"/>
-                                    <Image Classes="home-tile-art"
-                                           Source="{Binding Card.IconName, Converter={x:Static views:SkinImageConverter.Instance}, ConverterParameter='{}{0}'}"
-                                           Stretch="Uniform" Width="200" Height="200" Margin="0,2,0,0"
-                                           HorizontalAlignment="Center"/>
-                                    <TextBlock Classes="home-tile-caption-title"
-                                               Text="{Binding Card.Label}" FontSize="24" FontWeight="SemiBold"
-                                               HorizontalAlignment="Center" Margin="0,6,0,0"
-                                               TextWrapping="Wrap" TextAlignment="Center"/>
-                                    <ItemsControl ItemsSource="{Binding Card.Facts}" Margin="0,16,0,0">
-                                      <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:CardFact">
-                                          <!-- One line of details, and above it the hairline the mockup drew
-                                             over every row - the rows hang under each other like slats. -->
-                                          <Border BorderBrush="#12FFFFFF" BorderThickness="0,1,0,0">
-                                            <Grid ColumnDefinitions="*,Auto" Margin="0,6">
-                                            <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="18"
-                                                       Opacity="0.6"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding Value}" FontSize="18"/>
-                                            </Grid>
-                                          </Border>
-                                        </DataTemplate>
-                                      </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                  </StackPanel>
-                                </Panel>
-
-                                <!-- The hours: a legend of its own, then every hour standing in a column
-                                     with its name and picture, then the chart - red temperature, light blue
-                                     chance, light blue millimetre bars - drawn by its own control. The
-                                     control's columns and this row's share their centres because both cut
-                                     the width into the same equal columns. -->
-                                <DockPanel Margin="14,10,14,6" IsVisible="{Binding Card.IsChart}">
-                                  <StackPanel Orientation="Horizontal" Spacing="18" DockPanel.Dock="Top"
-                                              HorizontalAlignment="Right" Margin="0,0,0,4">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                      <Border Width="18" Height="6" Background="#ff6a55" CornerRadius="3"
-                                              VerticalAlignment="Center"/>
-                                      <TextBlock Text="temperature" FontSize="18" Opacity="0.8"/>
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                      <Border Width="18" Height="6" Background="#7fd0f7" CornerRadius="3"
-                                              VerticalAlignment="Center"/>
-                                      <TextBlock Text="rain chance" FontSize="18" Opacity="0.8"/>
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                      <Border Width="14" Height="10" Background="#7fd0f7" CornerRadius="2"
-                                              VerticalAlignment="Center"/>
-                                      <TextBlock Text="mm" FontSize="18" Opacity="0.8"/>
-                                    </StackPanel>
-                                  </StackPanel>
-                                  <ItemsControl ItemsSource="{Binding Card.Slots}" DockPanel.Dock="Top">
-                                    <ItemsControl.ItemsPanel>
-                                      <ItemsPanelTemplate>
-                                        <UniformGrid Rows="1"/>
-                                      </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                      <DataTemplate x:DataType="api:WeatherSlot">
-                                        <StackPanel Spacing="2" HorizontalAlignment="Center">
-                                          <TextBlock Text="{Binding Time, StringFormat=\{0:HH:mm\}}"
-                                                     FontSize="30" FontWeight="SemiBold"
-                                                     HorizontalAlignment="Center"/>
-                                          <Image Source="{Binding Icon, Converter={x:Static views:SkinImageConverter.Instance}, ConverterParameter='Weather/128x128/{0}'}"
-                                                 Width="92" Height="92" Stretch="Uniform"/>
-                                        </StackPanel>
-                                      </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                  </ItemsControl>
-                                  <views:WeatherChartControl Slots="{Binding Card.Slots}"/>
-                                </DockPanel>
-
-                                <!-- A day of the forecast, narrow as the design asked: the day's name, its
-                                     picture between name and numbers, the swing in one line, and the rain
-                                     in two of its own - how likely, how much. -->
-                                <StackPanel IsVisible="{Binding Card.IsDayFace}" Spacing="6"
-                                            HorizontalAlignment="Center" VerticalAlignment="Center"
-                                            Margin="8,6,8,6">
-                                  <TextBlock Classes="home-tile-caption-title" Text="{Binding Card.Label}"
-                                             FontSize="24" FontWeight="SemiBold"
-                                             HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
-                                             MaxLines="1"/>
-                                  <Image Classes="home-tile-art"
-                                         Source="{Binding Card.IconName, Converter={x:Static views:SkinImageConverter.Instance}, ConverterParameter='{}{0}'}"
-                                         Stretch="Uniform" Width="110" Height="110"
-                                         HorizontalAlignment="Center"/>
-                                  <TextBlock Text="{Binding Card.Detail}" FontSize="22"
-                                             HorizontalAlignment="Center"/>
-                                  <!-- Three readings, three rows: the hairlines between temperature, chance,
-                                       and millimetres are the same slats the current card's facts hang under. -->
-                                  <Border BorderBrush="#12FFFFFF" BorderThickness="0,1,0,0">
-                                    <TextBlock Text="{Binding Card.Sub}" FontSize="20" Opacity="0.85"
-                                               TextAlignment="Center" HorizontalAlignment="Center"
-                                               Margin="0,5,0,0"/>
-                                  </Border>
-                                  <Border BorderBrush="#12FFFFFF" BorderThickness="0,1,0,0">
-                                    <TextBlock Text="{Binding Card.Sub2}" FontSize="20" Opacity="0.85"
-                                               TextAlignment="Center" HorizontalAlignment="Center"
-                                               Margin="0,5,0,0"/>
-                                  </Border>
-                                </StackPanel>
-
-                                <!-- Air and radar on one card: the rain picture of the region above (asked
-                                     of the internet by the picture itself), the index as a huge figure in
-                                     its own colour under the caption, the named pollutants in a fact list,
-                                     and the card's name plain at the bottom - no gradient, as everywhere
-                                     on this wall. -->
-                                <DockPanel Margin="20,18,20,14" IsVisible="{Binding Card.IsAir}">
-                                  <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
-                                    <TextBlock Classes="home-tile-caption-title"
-                                               Text="{Binding Card.Label}" FontSize="15" FontWeight="SemiBold"/>
-                                    <TextBlock Classes="card-tile-detail" Text="{Binding Card.Detail}"
-                                               TextAlignment="Left" FontSize="13" Opacity="0.75"
-                                               TextTrimming="CharacterEllipsis" MaxLines="1"/>
-                                  </StackPanel>
-                                  <Border DockPanel.Dock="Top" Height="280" CornerRadius="10"
-                                          ClipToBounds="True" Background="#FF1D2733"
-                                          IsVisible="{Binding Card.HasRadar}">
-                                    <views:HttpImage Url="{Binding Card.RadarUrl}" Stretch="UniformToFill"/>
-                                  </Border>
-                                  <StackPanel DockPanel.Dock="Top" Margin="0,8,0,0"
-                                             IsVisible="{Binding Card.HasRadar}">
-                                    <TextBlock Text="Rain radar" FontSize="15" FontWeight="SemiBold"/>
-                                    <TextBlock Text="now &#183; refreshes with the wall" FontSize="13"
-                                               Opacity="0.7"/>
-                                  </StackPanel>
-                                  <StackPanel Margin="0,14,0,0" Spacing="2"
-                                              IsVisible="{Binding Card.Air, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
-                                    <StackPanel Orientation="Horizontal" Spacing="14">
-                                      <TextBlock Text="{Binding Card.AqiNumber}" FontSize="90"
-                                                 FontWeight="SemiBold" Foreground="{Binding Card.AqiBrush}"
-                                                 VerticalAlignment="Center"/>
-                                      <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding Card.AqiGrade}" FontSize="24"/>
-                                        <TextBlock Text="air quality index" FontSize="14" Opacity="0.6"/>
-                                      </StackPanel>
-                                    </StackPanel>
-                                    <ItemsControl ItemsSource="{Binding Card.Facts}" Margin="0,10,0,0">
-                                      <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:CardFact">
-                                          <Grid ColumnDefinitions="*,Auto" Margin="0,3">
-                                            <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="15"
-                                                       Opacity="0.6"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding Value}" FontSize="15"/>
-                                          </Grid>
-                                        </DataTemplate>
-                                      </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                  </StackPanel>
-                                </DockPanel>
-
-                                <!-- A feed's square, as the mockup drew it: the feed's own mark in the
-                                     middle - channel image or favicon, asked by the tile itself, with the
-                                     feed's initial painted behind it so a square is never faceless - the
-                                     name under the mark, and how many it handed over under the name. Its
-                                     ground and frame are the weather tiles' glass, unchanged. -->
-                                <Panel IsVisible="{Binding Card.IsFeedTile}">
-                                  <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
-                                              Spacing="12">
-                                     <Panel Width="88" Height="88" HorizontalAlignment="Center">
-                                       <Border Background="#24FFFFFF" CornerRadius="44"
-                                               IsVisible="{Binding Card.NoLogo}">
-                                        <TextBlock Text="{Binding Card.Glyph}" FontSize="38"
-                                                   FontWeight="SemiBold" HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"/>
-                                      </Border>
-                                      <views:HttpImage Url="{Binding Card.LogoUrl}" Width="88" Height="88"
-                                                       DecodeWidth="132" Stretch="Uniform"/>
-                                    </Panel>
-                                    <TextBlock Text="{Binding Card.Label}" FontSize="19" FontWeight="SemiBold"
-                                               HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
-                                               MaxLines="1"/>
-                                    <TextBlock Text="{Binding Card.Detail}" FontSize="14" Opacity="0.55"
-                                               HorizontalAlignment="Center" TextTrimming="CharacterEllipsis"
-                                               MaxLines="2" TextAlignment="Center"/>
-                                  </StackPanel>
-                                </Panel>
-
-                                <!-- A headline standing on its story's own picture: the photograph full
-                                     bleed, a veil so the words stay readable on whatever the sky in the
-                                     picture happens to be, the feed's mark in a chip where a thumbnail
-                                     would not be in the way, and the words at the bottom in the same
-                                     place a cover's title stands. The big places tell the story too. -->
-                                <Panel IsVisible="{Binding Card.IsNewsPicture}">
-                                  <views:HttpImage Url="{Binding Card.ImageUrl}" Stretch="UniformToFill"
-                                                   DecodeWidth="512"/>
-                                  <Border>
-                                    <Border.Background>
-                                      <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
-                                        <GradientStop Offset="0.30" Color="#00000000"/>
-                                        <GradientStop Offset="0.62" Color="#8C000000"/>
-                                        <GradientStop Offset="1.00" Color="#D9000000"/>
-                                      </LinearGradientBrush>
-                                    </Border.Background>
-                                  </Border>
-                                  <Border Background="#6B000000" CornerRadius="12" Padding="7,4,10,4"
-                                          Margin="10,10,0,0" HorizontalAlignment="Left"
-                                          VerticalAlignment="Top">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                      <Panel Width="18" Height="18">
-                                        <Border Background="#40FFFFFF" CornerRadius="9"
-                                                IsVisible="{Binding Card.NoLogo}">
-                                          <TextBlock Text="{Binding Card.Glyph}" FontSize="10"
-                                                     FontWeight="Bold" HorizontalAlignment="Center"
-                                                     VerticalAlignment="Center"/>
-                                        </Border>
-                                        <views:HttpImage Url="{Binding Card.LogoUrl}" Width="18" Height="18"
-                                                         DecodeWidth="36" Stretch="Uniform"/>
-                                      </Panel>
-                                      <TextBlock Text="{Binding Card.FeedName}" FontSize="12"
-                                                 VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                  </Border>
-                                  <StackPanel Margin="14,0,14,12" VerticalAlignment="Bottom" Spacing="5">
-                                    <TextBlock Text="{Binding Card.Label}" FontWeight="SemiBold"
-                                               FontSize="24" MaxLines="3" TextWrapping="Wrap"
-                                               TextTrimming="CharacterEllipsis"
-                                               IsVisible="{Binding Card.Hero}"/>
-                                    <TextBlock Text="{Binding Card.Label}" FontWeight="SemiBold"
-                                               FontSize="15" MaxLines="2" TextWrapping="Wrap"
-                                               TextTrimming="CharacterEllipsis"
-                                               IsVisible="{Binding Card.NotHero}"/>
-                                    <TextBlock Text="{Binding Card.Story}" FontSize="13" Opacity="0.8"
-                                               MaxLines="2" TextWrapping="Wrap"
-                                               TextTrimming="CharacterEllipsis"
-                                               IsVisible="{Binding Card.Hero}"/>
-                                    <TextBlock Text="{Binding Card.Detail}" FontSize="12" Opacity="0.65"
-                                               TextTrimming="CharacterEllipsis" MaxLines="1"/>
-                                  </StackPanel>
-                                </Panel>
-
-                                <!-- A headline whose feed named no picture: the words themselves on the
-                                     wall's own glass - the weather tiles' ground and frame, untouched -
-                                     the title, the story under a hairline the way the fact rows hang
-                                     under each other, and the when at the bottom of the square. -->
-                                <DockPanel Margin="14,12,14,12" IsVisible="{Binding Card.IsNewsWords}">
-                                  <TextBlock DockPanel.Dock="Bottom" Text="{Binding Card.Detail}"
-                                             FontSize="11.5" Opacity="0.55" Margin="0,8,0,0"
-                                             TextTrimming="CharacterEllipsis" MaxLines="1"/>
-                                  <StackPanel Spacing="0">
-                                    <TextBlock Text="{Binding Card.Label}" FontSize="16" FontWeight="SemiBold"
-                                               TextWrapping="Wrap" MaxLines="4"
-                                               TextTrimming="CharacterEllipsis"/>
-                                    <Border BorderBrush="#12FFFFFF" BorderThickness="0,1,0,0" Margin="0,8,0,0"
-                                            IsVisible="{Binding Card.HasStory}">
-                                      <TextBlock Text="{Binding Card.Story}" FontSize="12" Opacity="0.7"
-                                                 Margin="0,8,0,0" TextWrapping="Wrap" MaxLines="4"
-                                                 TextTrimming="CharacterEllipsis"/>
-                                    </Border>
-                                  </StackPanel>
-                                </DockPanel>
-
-                                <!-- Every other card - none of the walls has one since the news squares
-                                     got their own faces - keeps the face it always wore: the big number
-                                     top left, the picture's place, the news mark, and the name in the
-                                     shared fade. -->
-                                <Panel IsVisible="{Binding Card.IsPlain}" Background="{DynamicResource PanelRaisedBrush}">
-                                <!-- The big number and its small lines, top left, as the reference's today-card
-                                     drew them. A card without a big number leaves this whole stack empty - an
-                                     empty TextBlock asks for no room, so no row has to be hidden by hand. -->
-                                <StackPanel Orientation="Vertical" Spacing="4" Margin="22,18,110,0"
-                                            HorizontalAlignment="Left" VerticalAlignment="Top">
-                                  <TextBlock Classes="card-tile-big" Text="{Binding Card.BigText}"/>
-                                  <TextBlock Classes="card-tile-sub" Text="{Binding Card.Sub}"/>
-                                </StackPanel>
-                                <!-- The sky itself, right of the numbers - the reference drew today's picture
-                                     three hundred wide at 1080; off the wall's own scale here. -->
-                                <Image Classes="home-tile-art"
-                                       Source="{Binding Card.IconName, Converter={x:Static views:SkinImageConverter.Instance}, ConverterParameter='{}{0}'}"
-                                       Stretch="Uniform" MaxWidth="220" MaxHeight="220"
-                                       Margin="0,30,26,0"
-                                       HorizontalAlignment="Right" VerticalAlignment="Top"
-                                       IsVisible="{Binding Card.HasRightIcon}"/>
-                                <!-- A day's or a feed's picture, alone in the middle above the title band -
-                                     the reference's BigIcon measure; the margins leave the band's room free. -->
-                                <Image Classes="home-tile-art"
-                                       Source="{Binding Card.IconName, Converter={x:Static views:SkinImageConverter.Instance}, ConverterParameter='{}{0}'}"
-                                       Stretch="Uniform"
-                                       Margin="24,24,24,90"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                                       IsVisible="{Binding Card.HasCenteredIcon}"/>
-                                <!-- The news mark where a thumbnail would stand, top right, as the reference's
-                                     TopNews template stamped it. -->
-                                <Image Source="{Binding Card.BadgeName, Converter={x:Static views:SkinImageConverter.Instance}, ConverterParameter='{}{0}'}"
-                                       Width="40" Height="40" Stretch="Uniform"
-                                       Margin="0,10,10,0"
-                                       HorizontalAlignment="Right" VerticalAlignment="Top"
-                                       IsVisible="{Binding Card.HasBadge}"/>
-                                <!-- The card's name in the very same fade a cover's title stands in, with the
-                                     small line the reference's templates carried under the name. -->
-                                <Border Classes="home-tile-caption"
-                                        VerticalAlignment="Bottom"
-                                        Padding="8,5,8,10">
-                                  <StackPanel Orientation="Vertical">
-                                    <TextBlock Classes="card-tile-detail"
-                                               Text="{Binding Card.Detail}"
-                                               TextTrimming="CharacterEllipsis"
-                                               MaxLines="2"/>
-                                    <TextBlock Classes="home-tile-caption-title"
-                                               Text="{Binding Label}"
-                                               FontSize="15"
-                                               FontWeight="SemiBold"
-                                               TextTrimming="CharacterEllipsis"
-                                               MaxLines="2"/>
-                                  </StackPanel>
-                                </Border>
-                                </Panel>
-                              </Panel>
-                            </Border>
-                            <Border Classes="home-tile-edge" IsHitTestVisible="False"/>
-                          </Panel>
-                        </Button>
-                        </Border>
-
-                        <!-- Two surfaces, because a shadow cannot live on a clipped edge: the outer one is the
-                             ground the tile stands on and casts its BoxShadow (which must fall outside its own
-                             edges, so it clips nothing), the inner one is the face the picture stands on and
-                             does the clipping. Both are dressed by the worn skin's styles, not here. -->
-                        <Border Classes="home-tile-shadow" IsVisible="{Binding IsCover}">
-                        <Button Classes="nereus-content-tile"
-                                Width="{Binding Width}"
-                                Height="{Binding Height}"
-                                Focusable="{Binding IsFocusable}"
-                                Tag="{Binding}"
-                                GotFocus="OnNereusTileGotFocus"
-                                Click="OnNereusTileClick">
-                          <Panel>
-                          <Border Classes="home-tile-face" ClipToBounds="True">
-                          <Grid>
-                            <!-- Nothing frosts here. A cover whose artwork is missing or still arriving used to frost
-                                 the piece of wall behind it the way the shortcut glass does, and that was the single
-                                 most expensive thing on the home screen: the glass samples the backdrop and blurs
-                                 it in software, once per surface per frame, and a wall arrives with seventeen to
-                                 twenty-four covers whose posters have all not landed yet - so every frame of the way
-                                 up cost one blurred backdrop per cover standing without a picture. Measured over
-                                 eight switches at 3440x1440, taking this one surface away cut the frames slower than
-                                 40 ms from 51 to 32 and their summed time from 5140 ms to 3265 ms, which is all of
-                                 the frosting's cost - the shortcut glass beside it measures as nothing, and it
-                                 measured as nothing wearing liquid glass too (the same median frame time and the
-                                 same p95 over eight switches), which is why it keeps its glass and this does not.
-                                 What a cover without a
-                                 picture stands on is the tile's own dark plate, the same #222222 the faces have
-                                 always had, for the moment its poster is on its way. The reference never frosted
-                                 anything here - Nereus shipped no blur at all (NereusSkinSettings.FanartBlur says
-                                 so where the dial is explained) - so the plate is the worn skin's own picture too. -->
-                            <!-- The cover, decoded the width the wall draws it at. A poster out of the fanart cache
-                                 is a 2000x3000 scan, and a wall realises its seventeen to nineteen covers in one
-                                 beat: decoded whole, that is a twenty-four megabyte allocation per cover on the
-                                 thread that draws, and the picture cache cannot hold a wall of them, so every step
-                                 along the menu decoded the whole wall again. Six hundred and forty pixels is the
-                                 widest place a cover has on a band - the two by two at its head - with the room the
-                                 focus morph steps into; see ArtworkConverter.WALL_DECODE_WIDTH for the arithmetic. -->
-                            <Image Classes="home-tile-art"
-                                   Source="{Binding Title.Artwork, Converter={x:Static views:ArtworkConverter.Instance}, ConverterParameter=wall}"
-                                   Stretch="UniformToFill"
-                                   IsVisible="{Binding IsTitle}"/>
-                            <!-- no poster (and none on its way): the medium's mark stands on the plate, in the
-                                 same three spells as every media tile's fallback - audio, image or video -->
-                            <Path Data="{Binding Title.FallbackIcon, Converter={x:Static views:SkinIconGeometryConverter.Instance}}"
-                                  Fill="{DynamicResource TextBrush}" Width="70" Height="70" Opacity="0.55"
-                                  Stretch="Uniform"
-                                  HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-16,0,0"
-                                  IsVisible="{Binding Title.HasNoArtwork}"/>
-                            <Border Classes="home-tile-caption"
-                                    VerticalAlignment="Bottom"
-                                    Padding="8,5,8,10">
-                              <TextBlock Classes="home-tile-caption-title"
-                                         Text="{Binding Label}"
-                                         FontSize="15"
-                                         FontWeight="SemiBold"
-                                         VerticalAlignment="Bottom"
-                                         TextTrimming="CharacterEllipsis"
-                                         MaxLines="2"/>
-                            </Border>
-                          </Grid>
-                          </Border>
-                          <!-- The frame, laid over the edge of the face and not around it: the same ring the
-                               shortcut glass wears (one class, one set of numbers, brightened by the same
-                               rule), drawn after the face so the face's own clip cannot saw off its outer half.
-                               This tile used to answer focus with a hard four pixel white frame of its own; that
-                               frame is gone, and what a viewer sees now is the ghost edge coming up to full light
-                               on the tile they stand on. Out of the pointer's way, because the Button is what
-                               gets stood on. -->
-                          <Border Classes="home-tile-edge" IsHitTestVisible="False"/>
-                          </Panel>
-                        </Button>
-                        </Border>
-
-                        <!-- The shortcut, as glass. Glass is not a white rectangle with an icon on it: it lets the
-                             picture behind it through, out of focus and bent where its rim curves into the wall,
-                             it has body, and it has an edge that catches the light. So the tile lenses the screen
-                             itself behind it - the piece of the wall standing behind THIS tile - through a shader,
-                             with the veil of the glass over that lens and
-                             the glyph on top of the veil, standing centred on the tile with no box around it at
-                             all. The frame is a gradient rather than one flat line because a glass edge is bright
-                             where it catches the light and dark where it does not. Standing on the tile lifts its
-                             background lighter, brings the edge up from a ghost to full light and draws the
-                             outline of the glyph round the icon; nothing travels across the glass, nothing zooms,
-                             the corner stays the corner, and no band lies across the bottom of the frame. Every number of this - how deep the blur, how much veil,
-                             how bright the edge - lives either here on the glass surface or in styles.xaml. -->
-                        <!-- Out of the glass's own backdrop, on purpose and for every one of them at once.
-
-                             A liquid glass surface is handed no framebuffer to sample: the library walks this
-                             window's own visual tree and draws it once into a bitmap, and it leaves each
-                             surface's own subtree out of that walk - each surface's OWN, no more. Five of these
-                             tiles stand side by side in a rail, so every one of them lensed its neighbours'
-                             finished glass, bent that again, and handed the result back to the neighbours for the
-                             next capture. Every round trip adds the tint's white and the vibrancy's lift, so a
-                             rail of these left standing a while drifts to a pale plate: not a rounding problem,
-                             not a clip problem, and not anything a fresh frame would show - which is why it looked
-                             fine in a screenshot taken straight after a start and wrong after that.
-
-                             Excluded, a tile bends the wall and the artwork behind it and nothing else, which is
-                             what glass does, and the loop has no way to close. -->
-                        <!-- The same ground the covers stand on: the shared Border.home-tile-shadow, so a shortcut
-                             is laid on the wall by the one BoxShadow the skin knows and not by a second shadow of
-                             the glass's own invention. The border is transparent - it carries the shadow and
-                             nothing else - and the glass sits in it as the cover's face sits in its own. -->
-                        <Border Classes="home-tile-shadow" IsVisible="{Binding IsShortcut}">
-                        <Button Classes="nereus-shortcut-tile"
-                                lg:LiquidGlassBackdrop.IsExcludedFromCapture="True"
-                                IsVisible="{Binding IsShortcut}"
-                                Width="{Binding Width}"
-                                Height="{Binding Height}"
-                                Focusable="{Binding IsFocusable}"
-                                Tag="{Binding}"
-                                GotFocus="OnNereusTileGotFocus"
-                                Click="OnNereusTileClick">
-                          <Panel>
-                            <!-- ONE surface for the glass itself: the lens and its rounding are drawn by this
-                                 one surface, and the frame is a ring laid over its edge afterwards. The shadow it
-                                 stands away from the wall on is deliberately NOT its own - the tile wears the
-                                 skin's shared Border.home-tile-shadow, wrapped round this Button above - because
-                                 every other tile on the wall is laid down by that one shadow, and a shortcut
-                                 casting a shadow of its own invention sat in a darkness none of its neighbours had.
-
-                                 It took three attempts to see why anything else fails. Two roundings cannot be
-                                 right: the face was rounded at ten while the surface, inset by the frame's own
-                                 three, was rounded at seven or eight, and where the two circles disagree a viewer
-                                 sees a step in the corner - which is the artifact that survived every clip I
-                                 moved around, because clipping was never the problem, the two circles were.
-
-                                 So the surface rounds at the tile's own ten and bends within that path, and it
-                                 casts nothing of its own: ShadowEnabled is off. A shader shadow laid next to the
-                                 skin's BoxShadow is two shadows under one tile, and the shadow that belongs to a
-                                 tile is the one every cover on the wall already wears - round at the same ten, so
-                                 the two agree about where the edge is. Nothing outside the glass clips either: the
-                                 shadow falls outside the tile's bounds, and the ring on top is drawn at the same
-                                 ten, so it covers the seam of the edge rather than fighting it, and it is out of
-                                 the way of the pointer because the Button is what gets stood on. The glass itself
-                                 does clip, and the reason is written below where the surface stands.
-
-                                 Two things a photograph of the running screen taught about this surface, both of
-                                 them against the obvious setting:
-
-                                 The shadow was there and invisible, because it falls outside the surface's bounds
-                                 while the Button it stands in is 159x159 - exactly the tile - and clips, as does
-                                 the row of tiles around it. Every pixel of a shadow that lies outside the tile was
-                                 being sawn off by those two cuts, and no amount of deepening it could show
-                                 through - which is also where the notch in the tile's bottom corners came from, a
-                                 shadow ending in a straight line a finger's breadth before its rounding turns.
-                                 Neither clips any more (see the row above and the tile's style in styles.xaml),
-                                 and that - not any number written on the glass - is what lets the tile's shadow
-                                 reach past the tile.
-
-                                 The plate going white was the same kind of mistake on the other side of the glass.
-                                 TintColor is not a wash laid over the frost: the library puts it down once at full
-                                 alpha in the Hue blend mode and once more as a fill, so a near-white tint is a
-                                 full-strength wash over everything behind the pane. A veil meant to sit inside the
-                                 glass therefore goes through SurfaceColor - one ordinary fill at its own alpha,
-                                 dark here, so the glass is darker than the wall it covers and reads as smoke
-                                 rather than as card. -->
-                            <!-- ONE glass, and it is liquid glass. The tile knew one other glass until now - the
-                                 frost, a strip of the screen behind it taken away out of focus and lifted - and
-                                 that frost is gone: what bends the wall here bends it as a lens does, taking the
-                                 backdrop out of focus, curving it where the rim of the tile curves into the wall,
-                                 pulling that bend apart into its colours by a hair's breadth and letting a light
-                                 run along the rim. None of that is a blur, so it was never a dial of the frost
-                                 turned further, and a tile wearing both at once is frosted AND lensed, which is
-                                 not a glass anyone chose.
-
-                                 What the lens costs is a second drawing of this window, described two comments up.
-                                 Measured over eight menu switches at 3440x1440 against the frost it replaced, the
-                                 median frame time and the p95 came out the same, and the slow frames came out the
-                                 same; that is why there is no switch in front of it and why the frost left rather
-                                 than staying behind a setting.
-
-                                 The face of the tile - veil, glyph, name - stands OUT of the glass, as its
-                                 sibling in this Panel and painted after it, so that the order stays what it
-                                 always was: glass, veil, glyph, name, and the ring over the seam. -->
-                            <!-- Round at the tile's own ten, the same veil and the same lift the tile always had,
-                                 and the library's own answer to what a lens of this size wants for its bend and
-                                 its dispersion, opened up until the lens is actually seen. The light along the rim
-                                 is fainter than the library draws it, because at its own opacity that light reads
-                                 as a frame laid over the tile rather than as glass. The shadow stays off for the
-                                 reason three paragraphs up - the tile is laid on the wall by the skin's one
-                                 BoxShadow, and a second shadow under the same tile is a tile sitting in a darkness
-                                 none of its neighbours have.
-
-                                 ClipToBounds is put back on by hand. The library turns it off in the surface's
-                                 statics, because a glass that casts its own shadow has to let that shadow
-                                 leave the control, and this tile does not cast its own - so the one reason
-                                 that margin exists is taken away here, and the margin is what was left
-                                 painting: five tiles standing twelve pixels apart came out of the first live
-                                 run as one plate, ring and gap together under one pane. Clipped, the lens
-                                 still samples outside its edge (that is what a lens does) and paints inside
-                                 it, which is all the rail has room for. The width and the position are
-                                 asserted in Tests.Frontend, because a plate is exactly as wide as the
-                                 shortcut row and a screenshot of it looks tidy at a glance. -->
-                            <lg:LiquidGlassSurface Classes="home-shortcut-liquid"
-                                                   ClipToBounds="True"
-                                                   CornerRadius="10"
-                                                   BlurRadius="10"
-                                                   Vibrancy="1.15"
-                                                   SurfaceColor="#33030810"
-                                                   RefractionHeight="20"
-                                                   RefractionAmount="45"
-                                                   DepthEffect="True"
-                                                   ChromaticAberration="True"
-                                                   HighlightWidth="0.5"
-                                                   HighlightOpacity="0.2"
-                                                   ShadowEnabled="False"/>
-                            <!-- The tint of the glass itself, laid over the lens. -->
-                            <Border Classes="home-shortcut-tint"/>
-                            <!-- The glyph stands on the glass, centred above the name, eight-tenths of
-                                 its old half-width - its own box, no box around it. It is a shape rather
-                                 than a picture, so the tile decides its colour and its state. -->
-                            <Path Classes="home-shortcut-glyph"
-                                  Width="{Binding IconSize}"
-                                  Height="{Binding IconSize}"
-                                  Stretch="Uniform"
-                                  HorizontalAlignment="Center"
-                                  VerticalAlignment="Center"
-                                  Data="{Binding IconName, Converter={x:Static views:SkinIconGeometryConverter.Instance}, ConverterParameter='{}{0}'}"/>
-                            <!-- The name, on the glass and not on a band: a band is a rectangle, and a
-                                 rectangle inside a rounded frame lies across the frame's corners. -->
-                            <TextBlock Classes="home-shortcut-caption"
-                                       Text="{Binding Label}"
-                                       TextTrimming="CharacterEllipsis"/>
-                            <!-- The frame, laid OVER the edge of the glass rather than around it: a ring, and
-                                 nothing else - no background, no clip - because the glass beneath it has already
-                                 decided where its edge is, at the very same ten. Laid over that edge the ring
-                                 hides the seam of the cut instead of arguing with it, and it stays out of the
-                                 pointer's way because the Button is what a viewer stands on. -->
-                            <Border Classes="home-tile-edge" IsHitTestVisible="False"/>
-                          </Panel>
-                        </Button>
-                        </Border>
-                        </Panel>
-                      </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                  </ItemsControl>
-                </Grid>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
+          <!-- Two walls, and only ever one of them lit: the reference's own double hosts (master_homemenu.xaml
+               stands two ContentControls in the layout; HomeMenuModel.UpdateContent :660-673 hands the next
+               entry to the dark one and only swaps which is shown). A wall that stands on the dark host is
+               still realized when the viewer walks back to its entry - the return is a swap of a pointer, not
+               a rebuild - and a wall being built goes into the dark host where no eye is, never measured or
+               dressed under the viewer's gaze. The dark host is switched off (HomeView.SyncWallHosts) so its
+               tiles can never take the caret, exactly like the reference's IsEnabled="False" on the hidden
+               ContentControl. -->
+          <Grid Name="nereusWallHosts">
+            <ItemsControl Name="nereusWall0" Classes="nereus-wall" ItemsSource="{Binding WallGroups0}"
+                          ItemTemplate="{StaticResource NereusWallBandTemplate}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal"/>
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+            </ItemsControl>
+            <ItemsControl Name="nereusWall1" Classes="nereus-wall" ItemsSource="{Binding WallGroups1}"
+                          ItemTemplate="{StaticResource NereusWallBandTemplate}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal"/>
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+            </ItemsControl>
+          </Grid>
           </LayoutTransformControl>
         </ScrollViewer>
       </DockPanel>

@@ -18,6 +18,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
@@ -27,6 +28,7 @@ using CommunityToolkit.Mvvm.Input;
 using Avalonia;
 using MediaPortal.Frontend.Api;
 using MediaPortal.Frontend.Caching;
+using MediaPortal.Frontend.Services;
 using MediaPortal.Frontend.Skins.Nereus;
 using MediaPortal.Frontend.Settings;
 using MediaPortal.Frontend.Theming;
@@ -769,6 +771,11 @@ namespace MediaPortal.Frontend.ViewModels
 
     private void RebuildMenu(bool connected)
     {
+      // Every wall the hosts hold was read from entries about to be recreated, and a fresh menu is the
+      // reference's own moment to let its home contents reload. The hosts keep wearing what they wear until a
+      // wall goes up over it; only the right to answer a return from cache is taken away here.
+      ClearWallCache();
+
       // Which entry the viewer was standing on, remembered across the rebuild. A refresh that left the selection at
       // the top of the menu would also refill the content pane with the wrong entry's lists, which is a long way
       // from what the viewer was looking at a second ago.
@@ -896,17 +903,82 @@ namespace MediaPortal.Frontend.ViewModels
     /// flat list of <see cref="HomeRow"/>s rather than four lists, because a remote can only stop on something it
     /// can walk into, and a heading nobody can stop on is decoration.
     /// </remarks>
-    public ObservableCollection<HomeRow> ContentRows { get; } = new ObservableCollection<HomeRow>();
+    /// <remarks>
+    /// The rows live on two hosts, side by side and both permanently in the tree, like the reference's
+    /// <c>_contentProperties[0|1]</c> pair (<c>HomeMenuModel.cs:110,670-672</c>): putting a wall up fills the dark
+    /// host and flips the index, so the wall a walker returns to is still standing where it was and its return
+    /// costs the flip and nothing else. <see cref="ContentRows"/> and <see cref="ContentGroups"/> name whichever
+    /// pair the index points at - the wall the viewer is looking at.
+    /// </remarks>
+    public ObservableCollection<HomeRow> WallRows0 { get; } = new ObservableCollection<HomeRow>();
 
-    /// <summary>The Nereus shortcut rail and horizontally arranged media mosaics.</summary>
-    public ObservableCollection<HomeContentGroup> ContentGroups { get; } =
-        new ObservableCollection<HomeContentGroup>();
+    /// <summary>The second host's rows - see <see cref="WallRows0"/>.</summary>
+    public ObservableCollection<HomeRow> WallRows1 { get; } = new ObservableCollection<HomeRow>();
+
+    /// <summary>The first host's bands - see <see cref="WallRows0"/>.</summary>
+    public ObservableCollection<HomeContentGroup> WallGroups0 { get; } = new ObservableCollection<HomeContentGroup>();
+
+    /// <summary>The second host's bands - see <see cref="WallRows0"/>.</summary>
+    public ObservableCollection<HomeContentGroup> WallGroups1 { get; } = new ObservableCollection<HomeContentGroup>();
+
+    private int _wallIndex;
+
+    /// <summary>Which of the two hosts the screen shows. Flipped whenever another entry's wall goes up.</summary>
+    public int WallIndex
+    {
+      get { return _wallIndex; }
+    }
+
+    private ObservableCollection<HomeContentGroup> WallGroupsAt(int slot)
+    {
+      return slot == 0 ? WallGroups0 : WallGroups1;
+    }
+
+    private ObservableCollection<HomeRow> WallRowsAt(int slot)
+    {
+      return slot == 0 ? WallRows0 : WallRows1;
+    }
+
+    /// <summary>The rows of the standing wall - the pair the index points at. See <see cref="WallRows0"/>.</summary>
+    public ObservableCollection<HomeRow> ContentRows
+    {
+      get { return WallRowsAt(_wallIndex); }
+    }
+
+    /// <summary>The Nereus shortcut rail and horizontally arranged media mosaics of the standing wall.</summary>
+    public ObservableCollection<HomeContentGroup> ContentGroups
+    {
+      get { return WallGroupsAt(_wallIndex); }
+    }
 
     /// <summary>Whether the pane has anything to say, which is what keeps its heading off an empty screen.</summary>
     public bool HasContent
     {
       get { return ContentRows.Count > 0; }
     }
+
+    /// <summary>
+    /// A wall that has been read through once: the bands and rows, and with them the titles whose covers have
+    /// already been fetched. The reference kept these as the living <c>HomeContent</c> objects in
+    /// <c>HomeMenuModel._homeContent</c> (:82) - read once, shown again as often as the walker returns, reloaded
+    /// only on a refresh. A wall that no host is wearing any more drops back to here rather than to the server.
+    /// </summary>
+    private sealed class BuiltWall
+    {
+      public BuiltWall(List<HomeContentGroup> wall, List<HomeRow> rows)
+      {
+        Wall = wall;
+        Rows = rows;
+      }
+
+      public List<HomeContentGroup> Wall { get; }
+      public List<HomeRow> Rows { get; }
+    }
+
+    private readonly Dictionary<MainMenuEntry, BuiltWall> _builtWalls = new Dictionary<MainMenuEntry, BuiltWall>();
+
+    /// <summary>Which entry's wall each host is wearing right now; <c>null</c> while a host holds nothing's wall.</summary>
+    private readonly MainMenuEntry?[] _wallOwner = new MainMenuEntry?[2];
 
     /// <summary>
     /// Which reading of the pane is the current one. Only the newest is allowed to keep writing, because walking
@@ -933,6 +1005,7 @@ namespace MediaPortal.Frontend.ViewModels
     /// </remarks>
     public async Task ShowContentAsync(MainMenuEntry? entry)
     {
+      HomeTrace.Log("pick", TraceLabel(entry));
       CancellationTokenSource? pending = Interlocked.Exchange(ref _pendingContentSelection, null);
       pending?.Cancel();
       await ShowContentAsync(entry, CancellationToken.None);
@@ -959,17 +1032,24 @@ namespace MediaPortal.Frontend.ViewModels
       int generation = Interlocked.Increment(ref _contentGeneration);
 
       // Read into collections nothing on screen is looking at, so that the settling and the reading run side by
-      // side and the wall can go up whole in the first beat after the settling.
-      var wall = new List<HomeContentGroup>();
-      var rows = new List<HomeRow>();
-      Task reading = ReadWallAsync(entry, generation, current.Token, wall, rows);
+      // side and the wall can go up whole in the first beat after the settling. A wall that was read through once
+      // is not asked for again - the reference's content objects kept their lists for the whole session and a
+      // return to a tile cost no reading at all, and that law is the whole of what this cache is.
+      BuiltWall? standing = entry != null && _builtWalls.TryGetValue(entry, out BuiltWall? held) ? held : null;
+      var wall = standing?.Wall ?? new List<HomeContentGroup>();
+      var rows = standing?.Rows ?? new List<HomeRow>();
+      HomeTrace.Log("read.ask", string.Format(CultureInfo.InvariantCulture, "gen={0} settle={1:F0} {2}{3}",
+          generation, settling.TotalMilliseconds, TraceLabel(entry), standing != null ? " cached" : ""));
+      Task<bool> reading = standing != null
+          ? Task.FromResult(true)
+          : ReadWallAsync(entry, generation, current.Token, wall, rows);
 
       try
       {
         if (settling > TimeSpan.Zero)
           await Task.Delay(settling, current.Token);
 
-        await ShowContentCoreAsync(entry, generation, current.Token, reading, wall, rows);
+        await ShowContentCoreAsync(entry, generation, current.Token, reading, wall, rows, standing);
       }
       finally
       {
@@ -1002,6 +1082,15 @@ namespace MediaPortal.Frontend.ViewModels
     public Action? WallLeaving { get; set; }
 
     /// <summary>
+    /// What the view is asked to do once <see cref="StandWall"/> is through - including the two ways it finishes
+    /// without writing a collection at all: the flip back to a wall that still stands realized on the dark host,
+    /// and the asking for the entry that is already standing. Neither sends the view a band to look at, yet the
+    /// step did take the wall down, and a wall left down with nothing coming would leave the viewer looking at
+    /// the fanart for the asking.
+    /// </summary>
+    public Action? WallStood { get; set; }
+
+    /// <summary>
     /// Reads one entry's wall and puts it up: once, whole, and in one beat.
     /// </summary>
     /// <remarks>
@@ -1013,30 +1102,60 @@ namespace MediaPortal.Frontend.ViewModels
     /// fading up - never a wall being built, and never two walls on the screen at once.
     /// </remarks>
     private async Task ShowContentCoreAsync(MainMenuEntry? entry, int generation, CancellationToken cancellation,
-        Task reading, List<HomeContentGroup> wall, List<HomeRow> rows)
+        Task<bool> reading, List<HomeContentGroup> wall, List<HomeRow> rows, BuiltWall? standing)
     {
-      // Asked for before the settling started, so this usually waits on an answer that arrived long ago.
-      await reading;
+      // Asked for before the settling started, so this usually waits on an answer that arrived long ago. A cached
+      // wall answers at once - it was read through when it was first asked for.
+      bool standable = await reading;
+      HomeTrace.Log("read.answer", "gen=" + generation);
 
       // Somebody walked on while this was being read. The wall it left standing belongs to the entry being looked
       // at now, and this reading has nothing left to say about it.
       if (generation != Volatile.Read(ref _contentGeneration) || cancellation.IsCancellationRequested)
+      {
+        HomeTrace.Log("stale", "gen=" + generation);
         return;
+      }
 
       // The way down, which the reading cannot be waited for afterwards: the fade has to happen between two walls
       // that are both known, and by now the one being put up is. Waiting here costs the length of the fade and
       // nothing else - the server has already answered.
       Func<Task>? handover = WallHandover;
       if (handover != null)
+      {
+        HomeTrace.Log("handover.ask", "gen=" + generation);
         await handover();
+        HomeTrace.Log("handover.free", "gen=" + generation);
+      }
 
       // And somebody can still have walked on during that fade, in which case the wall they left is not this one's
       // business either.
       if (generation != Volatile.Read(ref _contentGeneration) || cancellation.IsCancellationRequested)
+      {
+        HomeTrace.Log("stale", "gen=" + generation);
         return;
+      }
 
       _paneEntry = entry;
-      PutUpWall(wall, rows);
+      if (standing == null && standable && entry != null && !IsWeatherEntry(entry) && !IsNewsEntry(entry))
+      {
+        // The reading is through and it did not refuse - the wall is held for the next visit, the way the
+        // reference held its HomeContent objects for the whole session. The two information walls are left out:
+        // their readers already keep the answer in hand and re-tell it without the internet, and the standing
+        // weather and news walls have always refreshed themselves from the reader on every step.
+        _builtWalls[entry] = new BuiltWall(wall, rows);
+        standing = _builtWalls[entry];
+      }
+
+      Stopwatch wallUp = Stopwatch.StartNew();
+      StandWall(entry, wall, rows, standing);
+      HomeTrace.Log("wallup", string.Format(CultureInfo.InvariantCulture, "gen={0} swap={1:F1} {2}",
+          generation, wallUp.Elapsed.TotalMilliseconds, TraceLabel(entry)));
+
+      // A wall that went onto its host says so band by band, and the view answers those; a flip and a no-op say
+      // nothing, and this is their turn to be heard. The view answers both signals through one guard, so the wall
+      // is put in the light once whichever way the standing finished.
+      WallStood?.Invoke();
 
       // The reference's home screen never stands on nothing: the walker is put on the first cover the moment the
       // wall is up, which is also what picks the fanart behind the screen and the line at its bottom left.
@@ -1063,27 +1182,82 @@ namespace MediaPortal.Frontend.ViewModels
     /// and with their rows for the pane the other faces read, so the wall the viewer sees coming up in the fade is
     /// a finished wall rather than one being filled.
     /// </summary>
-    private void PutUpWall(List<HomeContentGroup> wall, List<HomeRow> rows)
+    /// <summary>
+    /// Stands one entry's wall up by the reference's own law (<c>HomeMenuModel.UpdateContent</c> :660-673): if
+    /// the entry's wall is the one already standing, nothing happens at all; otherwise the wall goes onto the
+    /// dark host - only when that host is not already wearing it - and the index flips to it. A wall the walker
+    /// returns to from the other side is still realized where it stands, and its return is the flip and nothing
+    /// else: no reading, no collections rewritten, no tile built a second time.
+    /// </summary>
+    private void StandWall(MainMenuEntry? entry, List<HomeContentGroup> wall, List<HomeRow> rows, BuiltWall? standing)
     {
-      ContentRows.Clear();
-      foreach (HomeRow row in rows)
-        ContentRows.Add(row);
+      int current = _wallIndex;
+      if (standing != null && ReferenceEquals(_wallOwner[current], entry))
+      {
+        // The reference's own "is it already there" check (:667): re-asking for the entry being worn may not
+        // move the screen out from under the viewer's feet.
+        HomeTrace.Log("wall.standing", TraceLabel(entry));
+        return;
+      }
 
-      ContentGroups.Clear();
-      foreach (HomeContentGroup band in wall)
-        ContentGroups.Add(band);
+      int next = 1 - current;
+      if (standing == null || !ReferenceEquals(_wallOwner[next], entry))
+      {
+        // The dark host wears another entry's wall - or none. Only then does the wall go into it; a host already
+        // wearing this entry's realized wall keeps wearing it untouched.
+        PutUpWallOn(next, wall, rows);
+        // Only a wall that is held in the cache counts as owned: a refused reading stands, but nobody may
+        // "return" to it - the next visit has to ask the server again, and an owner that never clears would
+        // keep answering with the stale refusal forever.
+        _wallOwner[next] = standing != null ? entry : null;
+      }
 
+      _wallIndex = next;
       SelectedContent = null;
+      OnPropertyChanged(nameof(WallIndex));
+      OnPropertyChanged(nameof(ContentGroups));
+      OnPropertyChanged(nameof(ContentRows));
     }
 
     /// <summary>
-    /// Reads one entry's lists into the wall and rows handed in, and leaves them for <see cref="PutUpWall"/>.
+    /// Empties one host and puts the finished wall on it - bands and rows complete, in one beat, while the
+    /// screen is looking at its host and not at this one.
     /// </summary>
-    private async Task ReadWallAsync(MainMenuEntry? entry, int generation, CancellationToken cancellation,
+    private void PutUpWallOn(int slot, List<HomeContentGroup> wall, List<HomeRow> rows)
+    {
+      ObservableCollection<HomeRow> hostRows = WallRowsAt(slot);
+      hostRows.Clear();
+      foreach (HomeRow row in rows)
+        hostRows.Add(row);
+
+      ObservableCollection<HomeContentGroup> hostGroups = WallGroupsAt(slot);
+      hostGroups.Clear();
+      foreach (HomeContentGroup band in wall)
+        hostGroups.Add(band);
+    }
+
+    /// <summary>
+    /// Throws away every held wall and both hosts' owners. A fresh reading of the menu recreates the entries
+    /// themselves, and a different server was never asked about any of these shelves - the reference reloaded
+    /// its home contents on exactly those moments too (<c>RegisterMediaItem</c> and refresh, never on a step).
+    /// </summary>
+    private void ClearWallCache()
+    {
+      _builtWalls.Clear();
+      _wallOwner[0] = null;
+      _wallOwner[1] = null;
+    }
+
+    /// <summary>
+    /// Reads one entry's lists into the wall and rows handed in, and leaves them for <see cref="StandWall"/>.
+    /// Answers whether the wall it built is one worth holding for the next visit - a refusal says no, because
+    /// the next visit must ask the server again and not stand on yesterday's refusal.
+    /// </summary>
+    private async Task<bool> ReadWallAsync(MainMenuEntry? entry, int generation, CancellationToken cancellation,
         List<HomeContentGroup> wall, List<HomeRow> rows)
     {
       if (entry == null)
-        return;
+        return false;
 
       // The leftover plugins get the band the reference gives them: one band of the face's widest measure, laid
       // out in the mosaic its SquareTileLayout5Template draws - nineteen places, the first, sixth and thirteenth
@@ -1105,7 +1279,7 @@ namespace MediaPortal.Frontend.ViewModels
         }
         if (plugins.Tiles.Count > 0)
           wall.Add(plugins);
-        return;
+        return true;
       }
 
       IReadOnlyList<NereusHomeShortcut> shortcuts = _nereusMenu.ShortcutsFor(entry);
@@ -1123,7 +1297,7 @@ namespace MediaPortal.Frontend.ViewModels
       // front end's own internet readers rather than of any shelf - and by the reference's own HasItems rule,
       // an answer with nothing in it builds no band at all, leaving the shortcuts and the help note behind.
       if (await AddInfoWallAsync(entry, wall, cancellation))
-        return;
+        return true;
 
       string[] mediaListSettings = (WornSkinSettingsOrNull() as NereusSkinSettings)?.HomeMenuActionMediaLists
           ?? Array.Empty<string>();
@@ -1136,7 +1310,7 @@ namespace MediaPortal.Frontend.ViewModels
         // only here, because the lists beside the menu are content, not help.
         if (HelpTextsShown)
           rows.Add(HomeRow.Note(entry.Openable ? "Press Enter: " + entry.Action : entry.Detail));
-        return;
+        return true;
       }
 
       // Which lists the pane shows, the reference answers in one line of its own (AbstractHomeContent.cs:
@@ -1147,7 +1321,7 @@ namespace MediaPortal.Frontend.ViewModels
       var groups = new HomeContentGroup[lists.Count];
 
       if (_client == null)
-        return;
+        return false;
 
       HomeSection section = entry.Section!;
       int askedFor = -1;
@@ -1168,7 +1342,7 @@ namespace MediaPortal.Frontend.ViewModels
               HomeContentList.CONTENT_LIST_LIMIT, 0, null, list.Seen, null, cancellation: cancellation);
 
           if (generation != Volatile.Read(ref _contentGeneration) || cancellation.IsCancellationRequested)
-            return;
+            return false;
 
           IReadOnlyList<MediaTitle> arrived = titles.Titles ?? Array.Empty<MediaTitle>();
           // HasItems, the reference's one test: an answer with nothing in it leaves no heading, no note and
@@ -1204,11 +1378,12 @@ namespace MediaPortal.Frontend.ViewModels
         // The list arrived without a token, so this server keeps its doors open to the room; whatever refusal
         // this screen saw before belonged to another server or to the switch before someone turned it off.
         ServerRefusesStrangers = false;
+        return true;
       }
       catch (ServerApiException ex)
       {
         if (generation != Volatile.Read(ref _contentGeneration) || cancellation.IsCancellationRequested)
-          return;
+          return false;
 
         // A refusal of the titles is the server asking who is calling; the sign-in boxes appear because of it,
         // and the note below says so.
@@ -1227,20 +1402,23 @@ namespace MediaPortal.Frontend.ViewModels
           groups[askedFor].AddNote(note);
           AddBand(wall, groups[askedFor]);
         }
+        return false;
       }
       catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
       {
+        return false;
       }
       catch (Exception ex)
       {
         if (generation != Volatile.Read(ref _contentGeneration) || cancellation.IsCancellationRequested)
-          return;
+          return false;
 
         HomeRow note = HomeRow.Note("reading failed: " + ex.Message);
         EnsureFailedBand(askedFor < 0 ? -1 : askedFor, lists, groups, rows);
         rows.Add(note);
         if (askedFor >= 0)
           groups[askedFor].AddNote(note);
+        return false;
       }
     }
 
@@ -1522,11 +1700,13 @@ namespace MediaPortal.Frontend.ViewModels
 
       if (IsWeatherEntry(entry))
       {
+        _builtWalls.Remove(entry);
         _weatherBrief = null;
         Volatile.Write(ref _weatherBriefAt, 0);
       }
       else if (IsNewsEntry(entry))
       {
+        _builtWalls.Remove(entry);
         _newsBrief = null;
         Volatile.Write(ref _newsBriefAt, 0);
       }
@@ -1540,6 +1720,8 @@ namespace MediaPortal.Frontend.ViewModels
 
     private void QueueContentForSelection(MainMenuEntry? entry)
     {
+      HomeTrace.Log("step", TraceLabel(entry));
+
       // The standing wall starts leaving with the step, not with the answer that comes after the settling and the
       // reading. Nothing here waits for it: the curve is written and the screen plays it out on its own.
       WallLeaving?.Invoke();
@@ -1564,6 +1746,14 @@ namespace MediaPortal.Frontend.ViewModels
         Interlocked.CompareExchange(ref _pendingContentSelection, null, selection);
         selection.Dispose();
       }
+    }
+
+    /// <summary>
+    /// Which tile a line of the home trace belongs to, in as many characters as the instrument needs.
+    /// </summary>
+    private static string TraceLabel(MainMenuEntry? entry)
+    {
+      return entry == null ? "entry=none" : "entry=" + entry.Label;
     }
 
     /// <summary>
