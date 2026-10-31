@@ -440,19 +440,26 @@
        glyph off whatever happens to be standing behind it, which is the whole point of the answer.
        Both ways of standing on a button light the mark, and with the same glow: a viewer who walks the row with
        the ring and a viewer who drags a mouse across it must see the same thing happen, or the screen looks
-       broken to whichever of them arrived second. The pointer's half stands behind the window's own gate, so a
-       pointer that was merely left on the screen does not go on claiming somebody stands there. -->
-  <Style Selector="Button.nereus-corner-button:focus">
+       broken to whichever of them arrived second. -->
+  <Style Selector="Button.nereus-corner-button:focus, Button.nereus-corner-button:pointerover">
     <Setter Property="Opacity" Value="1"/>
     <Setter Property="Effect">
       <DropShadowEffect BlurRadius="16" Color="#FFFFFFFF" OffsetX="0" OffsetY="0" Opacity="1"/>
     </Setter>
   </Style>
-  <Style Selector="Window:not(.pointer-resting) Button.nereus-corner-button:pointerover">
-    <Setter Property="Opacity" Value="1"/>
-    <Setter Property="Effect">
-      <DropShadowEffect BlurRadius="16" Color="#FFFFFFFF" OffsetX="0" OffsetY="0" Opacity="1"/>
-    </Setter>
+  <!-- And the ground is taken off the toolkit's hands in both states, the way the playback screen's buttons
+       long ago learned it must be: the control's own theme dresses its inner surface for a pointer over it
+       with its OWN colour - a grey disc, measured #444444, cut to the button's circle - and that dressing
+       lands on the surface inside the template, which no colour written on the button itself can outbid
+       (proved with a red the theme simply painted over). Only a rule that reaches into the template and
+       names that surface for the same state answers it. Said for the pointer AND the focus alike, so both
+       ways of standing on the mark sit on the same transparent ground and the glow stands alone - which is
+       what the keyboard always showed and what the mouse now shows too. -->
+  <Style Selector="Button.nereus-corner-button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="Button.nereus-corner-button:focus /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent"/>
   </Style>
 
   <!-- The tiles of the home's content wall: the quiet dark they stand on, the edge one wears the moment
