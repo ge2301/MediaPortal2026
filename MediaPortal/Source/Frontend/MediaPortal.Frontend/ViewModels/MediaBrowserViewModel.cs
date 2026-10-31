@@ -881,8 +881,13 @@ namespace MediaPortal.Frontend.ViewModels
       _screens = ScreenViewSettings.Load(null, out _);
       // The picture a tile wears opens with this screen's own remembered answer first and the worn skin's
       // setting behind it - the Media button puts the question on the screen itself, next to the View
-      // button, and a screen keeps the answer its viewer gave it there.
-      _tileKind = RememberedMedia() ?? (_skinSettings == null ? GridViewType.Poster : TileKindFor(AspectName, _skinSettings));
+      // button, and a screen keeps the answer its viewer gave it there. An episode shelf is the one shelf
+      // with no question to answer: an episode has no poster and no banner - the importers never wrote
+      // either - its only picture is the thumbnail standing on its tile, so the shelf opens in that shape
+      // whatever some other shelf once remembered, and the rail keeps the choice out of the menu entirely.
+      _tileKind = MediaCatalog.IsEpisode(AspectName)
+          ? GridViewType.Thumbnail
+          : RememberedMedia() ?? (_skinSettings == null ? GridViewType.Poster : TileKindFor(AspectName, _skinSettings));
       HasTiles = MusicTemplateKey != null || SkinEngine.TryTileTemplate(TileKey(_tileKind)) != null;
       // The cover is the third view of the reference's view mode, and since the viewer asked for it on every
       // screen it is a view rather than a privilege of one skin: a skin that draws its own covers gets its
@@ -1097,7 +1102,8 @@ namespace MediaPortal.Frontend.ViewModels
     /// </summary>
     public bool CanChooseMedia
     {
-      get { return !IsMusic; }
+      // Music says no for want of shapes; the episode shelf says no for want of a choice - see SwitchMedia.
+      get { return !IsMusic && !MediaCatalog.IsEpisode(AspectName); }
     }
 
     /// <summary>The template name the list on screen asks the skin for, whichever layout it stands in.</summary>
@@ -1569,8 +1575,11 @@ namespace MediaPortal.Frontend.ViewModels
     {
       // Music is not in the rotation. Its square wears the album's cover in every skin and every layout, and
       // a banner shelf of albums would be a wall of "no banner" placeholders - which is why the button is not
-      // on the screen at all. See CanChooseMedia.
-      if (IsMusic)
+      // on the screen at all. See CanChooseMedia. The episode shelf is not in it either, for a sharper reason:
+      // an importer writes an episode a thumbnail and nothing else, so a poster shelf of episodes is a wall
+      // of empty plates and a banner shelf the same wall sideways. The shape is not a choice here; it is
+      // what an episode is.
+      if (IsMusic || MediaCatalog.IsEpisode(AspectName))
         return;
 
       _tileKind = _tileKind switch
@@ -2350,8 +2359,13 @@ namespace MediaPortal.Frontend.ViewModels
 
         case MenuPage.Picture:
           MediaMenuHeading = "Picture";
-          AddMenuRow("Poster", "poster", new RelayCommand(() => PickPicture(GridViewType.Poster)), _tileKind == GridViewType.Poster);
-          AddMenuRow("Banner", "banner", new RelayCommand(() => PickPicture(GridViewType.Banner)), _tileKind == GridViewType.Banner);
+          // An episode shelf never opens here - its rail row is gone and its rotation stands still - but a
+          // page that could be reached by some other road would still have to lie about having no choice.
+          if (!MediaCatalog.IsEpisode(AspectName))
+          {
+            AddMenuRow("Poster", "poster", new RelayCommand(() => PickPicture(GridViewType.Poster)), _tileKind == GridViewType.Poster);
+            AddMenuRow("Banner", "banner", new RelayCommand(() => PickPicture(GridViewType.Banner)), _tileKind == GridViewType.Banner);
+          }
           AddMenuRow("Thumbnail", "thumbnail", new RelayCommand(() => PickPicture(GridViewType.Thumbnail)), _tileKind == GridViewType.Thumbnail);
           return;
 
