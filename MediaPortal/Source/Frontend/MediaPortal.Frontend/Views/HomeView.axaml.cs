@@ -69,27 +69,6 @@ namespace MediaPortal.Frontend.Views
     private readonly WmcHomeMenuModel _wmc;
 
     /// <summary>
-    /// How long the standing wall takes to leave the light when its entry changes. The way back up is longer and
-    /// lives with the wall's own curve in <c>HomeView.axaml</c> (0.45), because a picture arriving is worth more
-    /// watching than a picture leaving. These two are the only knobs the change of a home menu entry has: zero on
-    /// both is the hard cut this screen had before any of it.
-    /// </summary>
-    private const int WALL_SINK_MS = 180;
-
-    /// <summary>
-    /// The beat the screen is given on top of the curve's own length, because a curve is played out by the screen
-    /// rather than by the clock and the last frame wants to have been drawn before its successor is written.
-    /// </summary>
-    private const int WALL_SINK_ROOM_MS = 40;
-
-    /// <summary>
-    /// Whether the standing wall has been sent down and not yet brought back, and since when. The first decides
-    /// who pays for the curve (see <see cref="SinkStandingWallAsync"/>), the second how much of it is left.
-    /// </summary>
-    private bool _wallSinking;
-    private readonly System.Diagnostics.Stopwatch _wallSink = new System.Diagnostics.Stopwatch();
-
-    /// <summary>
     /// Whether the beat that answers a wall's arrival has been asked for already. A wall is put on band by band, so
     /// without this one answer every band folds, raises and measures the wall afresh.
     /// </summary>
@@ -149,12 +128,6 @@ namespace MediaPortal.Frontend.Views
     private const string TOP_MENU_ROW = "topMenuRow";
 
     /// <summary>
-    /// The class that puts the shorter curve on the wall for the length of a change of entries. Its curve is the
-    /// one the styles block keeps under that name in <c>HomeView.axaml</c>, and its length is <see cref="WALL_SINK_MS"/>.
-    /// </summary>
-    private const string WALL_SINKING_CLASS = "wall-sinking";
-
-    /// <summary>
     /// The window this home is standing in, while it is standing in one. The plain test windows that host
     /// this view in the test runs have no shell chrome at all, which is exactly the case where nothing is
     /// asked of it - hence a nullable, not an assumption.
@@ -207,15 +180,13 @@ namespace MediaPortal.Frontend.Views
       InitializeComponent();
 
       // Two hosts carry the walls, and the change of entries is the pair swapping which one is looked at - the
-      // reference's own exchange (HomeMenuModel.UpdateContent :660-673). The model reads a wall into the dark
-      // host where the screen cannot see it and then asks this view for the way between the two:
-      // SinkStandingWallAsync below, and RaiseWall where the finished wall arrives. Both walls start in the dark
-      // so that even the first wall of a session comes up on its curve rather than appearing.
+      // reference's own exchange (HomeMenuModel.UpdateContent :660-673), which is one moment and no curve: the
+      // model reads a wall into the dark host where the screen cannot see it, and the flip of which host wears
+      // the light is the whole of the switch (SyncWallHosts below, RaiseWall where a wall arrives behind a
+      // folded area). Both walls start in the dark so that the pane says nothing before its first wall stands.
       nereusWall0.Opacity = 0;
       nereusWall1.Opacity = 0;
       SyncWallHosts();
-      _home.WallHandover = SinkStandingWallAsync;
-      _home.WallLeaving = BeginWallSink;
       // A flip and a no-op write no band and send no notification - this is their turn to be heard with.
       _home.WallStood = QueueWallArrival;
 
@@ -940,78 +911,6 @@ namespace MediaPortal.Frontend.Views
     }
 
     /// <summary>
-    /// The way one wall leaves and its successor arrives: this wall is walked down out of the light, the model puts
-    /// the next entry's wall - which it has read through before asking - on the dark screen, and the styles bring it
-    /// back up. See <see cref="HomeViewModel.WallHandover"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Only one wall is ever on the screen, and that is what makes the change cheap. Two walls dissolving through
-    /// each other are the softer picture and the dearer one: every glass tile, every shadow and every cover is
-    /// drawn twice for as long as the two lie on each other, which on this screen was a switch that stumbled.
-    /// </para>
-    /// <para>
-    /// The wait below is the fade itself, not a pause added to it. A fade written and replaced in the same beat is
-    /// never drawn at all, which is the cut every attempt here before this one looked like. It used to be paid
-    /// twice over: the step sent its answer off half a second later and only then started the curve, so the viewer
-    /// watched a wall standing, then a fade, then its successor. Now the step itself sends the wall down (see
-    /// <see cref="BeginWallSink"/>) and this answer waits only for whatever the screen has not shown yet - which,
-    /// the way down being shorter than the settling, is nothing. The way down and the reading of a successor run
-    /// through the same half second, and the wall that leaves is already gone when its successor is written.
-    /// </para>
-    /// </remarks>
-    private async Task SinkStandingWallAsync()
-    {
-      // Normally nothing happens here but the waiting: the step onto the next rail tile already sent this wall on
-      // its way (BeginWallSink), and the reading of its successor ran while the curve was playing. What is paid is
-      // what the screen has not shown yet, never the whole curve again.
-      if (!_wallSinking)
-      {
-        // Nobody asked the wall down, which means the wall standing here is this entry's own - a re-read of the
-        // entry that is already worn, or a wall arriving behind an empty area. Then the way down is this answer's
-        // business and its whole length, because a successor put up in the same beat is a cut.
-        BeginWallSink();
-        if (!_wallSinking)
-          return;
-      }
-
-      long left = WALL_SINK_MS + WALL_SINK_ROOM_MS - _wallSink.ElapsedMilliseconds;
-      if (left > 0)
-      {
-        HomeTrace.Log("sink.tail", left.ToString());
-        await Task.Delay((int)left);
-      }
-    }
-
-    /// <summary>
-    /// Starts the standing wall on its way down and remembers when, so that whoever picks it up afterwards waits
-    /// for the rest of the curve rather than the whole of it.
-    /// </summary>
-    private void BeginWallSink()
-    {
-      // Already on its way down: a step further along the rail cannot take the same wall down twice, and the
-      // clock of the first step is the one that stands.
-      if (_wallSinking)
-        return;
-
-      // Nothing standing, nothing to take down: an empty area, or the first wall of a session. Its successor comes
-      // up out of the fold on RaiseWall, and waiting for a fade with no picture to fade would only delay it.
-      if (!_home.IsNereusHome || !nereusContentPane.IsVisible || _home.ContentGroups.Count == 0)
-      {
-        HomeTrace.Log("sink.skip");
-        return;
-      }
-
-      // The way down is the shorter curve the styles block keeps under this class name; it is put on for the walk
-      // down and taken off again on the way up, which leaves the wall wearing its rise curve at every other time.
-      _wallSinking = true;
-      _wallSink.Restart();
-      StandingWall.Classes.Add(WALL_SINKING_CLASS);
-      StandingWall.Opacity = 0;
-      HomeTrace.Log("sink");
-    }
-
-    /// <summary>
     /// The host that wears the wall the viewer is looking at, and the one that wears the wall being built or the
     /// wall the viewer may walk back to. Which is which is the model's one number (<see
     /// cref="HomeViewModel.WallIndex"/>), the same pointer the reference kept in <c>ContentIndex</c>.
@@ -1019,10 +918,12 @@ namespace MediaPortal.Frontend.Views
     private ItemsControl StandingWall => _home.WallIndex == 0 ? nereusWall0 : nereusWall1;
 
     /// <summary>
-    /// Lays the pair the way the reference laid its two ContentControls: the standing host takes part in the
-    /// screen and can be walked onto, and the dark one is switched off - <c>IsEnabled="False"</c> is what the
-    /// reference's hidden ContentControl carries so its tiles can never take the caret - while its wall stays
-    /// realized and ready for the walk back.
+    /// Lays the pair the way the reference laid its two ContentControls: the standing host wears the light and
+    /// takes part in the screen and can be walked onto, and the dark one is switched off - <c>IsEnabled="False"</c>
+    /// is what the reference's hidden ContentControl carries so its tiles can never take the caret - while its
+    /// wall stays realized and ready for the walk back. Writing the light here, in the beat the number flipped,
+    /// is the reference's one moment of the swap: no curve lies between the flip and the light, so the successor
+    /// is simply there the frame the answer arrives.
     /// </summary>
     private void SyncWallHosts()
     {
@@ -1031,9 +932,7 @@ namespace MediaPortal.Frontend.Views
       dark.IsEnabled = false;
       dark.Opacity = 0;
       standing.IsEnabled = true;
-      // The way-down curve belongs to the wall that went out, not to the one coming in: a host that sank while it
-      // was standing would otherwise rise on the short curve forever after.
-      standing.Classes.Remove(WALL_SINKING_CLASS);
+      standing.Opacity = 1;
     }
 
     /// <summary>
@@ -1099,32 +998,26 @@ namespace MediaPortal.Frontend.Views
     }
 
     /// <summary>
-    /// Brings the wall into the light on the styles' own curve, and with it the area it stands in - which is also
-    /// how the first wall of a session appears, since the fold and the view's own first beat leave it dark.
+    /// Puts the wall into the light and the area it stands in. The light is written, not curve-drawn - the
+    /// reference's swap is a moment, not a fade - so this is where a wall behind a folded area appears (the fold
+    /// having hidden it, nothing else) and where the first wall of a session shows itself.
     /// </summary>
     private void RaiseWall()
     {
-      // Visible first: a curve started behind an invisible pane is played out unseen and the wall then merely
-      // appears, which is the one thing this exchange exists to prevent. The shorter curve comes off before the
-      // light is written, so that the walk up is the wall's own and not the way down played backwards.
+      // Visible first: the pane that was folded away has to be in the screen before its wall's light means
+      // anything, and both writes land in the same beat, so what is drawn next is the whole wall at full light.
       nereusContentPane.IsVisible = true;
-      StandingWall.Classes.Remove(WALL_SINKING_CLASS);
       StandingWall.Opacity = 1;
-
-      // Standing in the light again, so the next step down is a new way down and not the tail of the old one.
-      _wallSinking = false;
     }
 
     /// <summary>
-    /// Takes the content area off the screen and leaves its wall in the dark it rises out of, so that whatever comes
-    /// after an empty entry comes up on its curve instead of appearing at full light. The pane's own opacity is
-    /// never written: it is the wall that fades, not the frame around it.
+    /// Takes the content area off the screen and leaves its wall dark, so that what comes after an empty entry
+    /// stands up whole in the beat it arrives. The pane's own opacity is never written: only the wall is lit.
     /// </summary>
     private void FoldWall()
     {
       nereusContentPane.IsVisible = false;
       nereusContentPane.Offset = new Vector(0, nereusContentPane.Offset.Y);
-      StandingWall.Classes.Remove(WALL_SINKING_CLASS);
       StandingWall.Opacity = 0;
     }
 

@@ -119,19 +119,21 @@ namespace Tests.Frontend
     }
 
     /// <summary>
-    /// The way a wall goes down belongs to the step onto the next tile, not to the answer that comes after the
-    /// settling: measured on the shown screen, a wall that was only taken down by that answer stood untouched for
-    /// a full settling after the viewer had decided, and its successor arrived 220 ms later still.
+    /// The reference's one-moment law (<c>HomeMenuModel.UpdateContent</c> :660-673): stepping onto the next tile
+    /// leaves the standing wall facing the viewer through the whole settling - nothing folds away, nothing fades -
+    /// and the successor takes its place in the beat its reading answers. What this screen used to do, sending the
+    /// wall down with the step, left the viewer looking at bare fanart for half a settling on every step; the
+    /// reference never shows that, and neither may this.
     /// </summary>
     [AvaloniaTest]
-    public async Task TheStepOntoANewTileSendsTheStandingWallDown()
+    public async Task TheStepLeavesTheStandingWallUpUntilItsSuccessorArrives()
     {
       Application app = RequireApplication();
       FrontendTheme.Apply(app, "nereus", out _);
 
       HomeViewModel home = new HomeViewModel();
       Assert.That(home.IsNereusHome, Is.True,
-          "the wall and its way down are Nereus' arrangement, so this screen has to be wearing Nereus");
+          "the wall and its swap are Nereus' arrangement, so this screen has to be wearing Nereus");
       Assert.That(HomeViewModel.WaitsForAPress, Is.False,
           "and the pane has to follow the walk, or a step onto a tile is not yet a step for the wall");
 
@@ -155,17 +157,17 @@ namespace Tests.Frontend
       Assert.That(first, Is.Not.Null, "the menu has to offer two tiles besides the one it stands on");
       Assert.That(second, Is.Not.Null, "the menu has to offer two tiles besides the one it stands on");
 
-      int sent = 0;
-      home.WallLeaving = () => sent++;
+      var wallBefore = home.ContentGroups;
 
       home.SelectedEntry = first;
-      Assert.That(sent, Is.EqualTo(1), "the step asks for the way down itself, before the settling has run");
       Assert.That(home.PaneEntry, Is.Not.SameAs(first),
-          "and that is before anything of the successor has been read, which is the point of asking so early");
+          "through the settling the old wall stands - the pane entry is written with the answer, not with the step");
+      Assert.That(ReferenceEquals(home.ContentGroups, wallBefore), Is.True,
+          "and nothing of the standing wall is touched at the step: no fold, no fade, no emptied collection");
 
       home.SelectedEntry = second;
-      Assert.That(sent, Is.EqualTo(2),
-          "a step whose predecessor is cancelled still sends its wall down - the viewer saw this step too");
+      Assert.That(home.PaneEntry, Is.Not.SameAs(second),
+          "a step whose predecessor is cancelled stands just as untouched until its own answer arrives");
 
       // And the reading is seen through to its end before the screen is left, so that the next screen does not
       // inherit a half-finished wall of this one.
@@ -175,8 +177,8 @@ namespace Tests.Frontend
     /// <summary>
     /// A tile picked with the mouse is the reference's explicitly chosen tile, which it answered at once
     /// (HomeMenuModel.OnSelectedItemChanged); only the walk that might still be moving waits for its settling.
-    /// Measured on the shown screen: a walked switch stands 515-594 ms after the step, a picked one 234-265 ms
-    /// after the click, which is the way down and nothing else.
+    /// A walked switch stands one settling after the step; a picked one answers as soon as its reading has,
+    /// since there is nothing on the way to wait for.
     /// </summary>
     [AvaloniaTest]
     public async Task APickedTileAnswersBeforeTheSettlingHasRun()

@@ -20,29 +20,11 @@
         </Transitions>
       </Setter>
     </Style>
-    <!-- The curve a home content wall comes up on: a wall goes up complete behind this curve rather than band by
-         band. The way down is put on in the code behind (HomeView.WALL_SINK_MS), because it is a shorter walk than
-         the way up and a styles block can only say one length. Only the wall fades; the pane around it never
-         changes its light. Both wall hosts wear the class, so a wall that was built in the dark host comes up on
-         exactly this curve when the index flips to it. -->
-    <Style Selector="ItemsControl.nereus-wall">
-      <Setter Property="Transitions">
-        <Transitions>
-          <DoubleTransition Property="Opacity" Duration="0:0:0.45" Easing="CubicEaseOut"/>
-        </Transitions>
-      </Setter>
-    </Style>
-    <!-- The way down, put on the wall by the code behind for as long as a change of entries is being made, and
-         taken off again on the way up so that the curve above is the one the wall normally wears. The length here
-         and HomeView.WALL_SINK_MS are the same number written down twice because a fade has to be waited for at
-         least as long as it takes. -->
-    <Style Selector="ItemsControl.nereus-wall.wall-sinking">
-      <Setter Property="Transitions">
-        <Transitions>
-          <DoubleTransition Property="Opacity" Duration="0:0:0.18" Easing="CubicEaseOut"/>
-        </Transitions>
-      </Setter>
-    </Style>
+    <!-- The wall of the home content changes its light in one beat and wears no transition: the reference's
+         change of contents is the flip of one pointer (HomeMenuModel.UpdateContent :660-673), the old wall stands
+         until that moment and the successor is simply there the next frame. Curves of 0.45 up and 0.18 down that
+         used to sit here were this port's own embellishment, and the whole screen felt their length on every
+         step. Only the wall is lit; the pane around it never changes its light. -->
     <!-- What a tile of this face's content wall is dressed in - the quiet dark ground, the edge it wears when
          something stands on it, the rounding of its corners and the shadow it casts - is said by the face
          itself, in Skins/Nereus/themes/default/styles.xaml. The classes the tiles wear are named there:

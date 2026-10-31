@@ -1076,33 +1076,10 @@ namespace MediaPortal.Frontend.ViewModels
     }
 
     /// <summary>
-    /// What the view is asked to do between reading a wall and putting it up: take the wall the viewer is looking
-    /// at down out of its light, and answer once that has been on the screen long enough to be seen. The model
-    /// waits here, which is the whole point - a wall that goes up in the same beat the old one came down is a cut,
-    /// and so is a fade the screen never got round to drawing. A view that fades nothing (no Nereus home, or no
-    /// wall standing) answers at once, and the wall goes up immediately.
-    /// </summary>
-    public Func<Task>? WallHandover { get; set; }
-
-    /// <summary>
-    /// What the view is asked to do the moment a rail tile is stepped onto, while the settling has not run and
-    /// nothing has been read yet: start the wall that stands there on its way down.
-    /// </summary>
-    /// <remarks>
-    /// The step is the moment the viewer decided something, and a screen that answers a step a full settling later
-    /// looks thoughtless however short the settling is. So the way down belongs to the step and the reading happens
-    /// while the wall is already going out, which takes the fade's length out of the wait instead of adding it to
-    /// the end. <see cref="WallHandover"/> then answers as soon as the curve has been played - usually before the
-    /// reading has come back at all. A view that fades nothing leaves this unsaid, and a wall that is already down
-    /// is not put down twice.
-    /// </remarks>
-    public Action? WallLeaving { get; set; }
-
-    /// <summary>
     /// What the view is asked to do once <see cref="StandWall"/> is through - including the two ways it finishes
     /// without writing a collection at all: the flip back to a wall that still stands realized on the dark host,
     /// and the asking for the entry that is already standing. Neither sends the view a band to look at, yet the
-    /// step did take the wall down, and a wall left down with nothing coming would leave the viewer looking at
+    /// step did move the wall, and a wall left down with nothing coming would leave the viewer looking at
     /// the fanart for the asking.
     /// </summary>
     public Action? WallStood { get; set; }
@@ -1114,9 +1091,10 @@ namespace MediaPortal.Frontend.ViewModels
     /// What used to happen - the pane emptied in the frame the switch was made, and every list going onto the wall
     /// as its own answer arrived, each of them restarting the pane's fade - is the pulse every viewer sees when
     /// they walk along the menu. Neither half of it is needed. A wall is read into <paramref name="wall"/> and
-    /// <paramref name="rows"/>, which nothing on screen is looking at, and goes up when the reading is through and
-    /// the view has taken the wall before it down, so what is watched is one picture fading out and its successor
-    /// fading up - never a wall being built, and never two walls on the screen at once.
+    /// <paramref name="rows"/>, which nothing on screen is looking at, and goes up the beat the reading is
+    /// through - the reference's one moment (<c>HomeMenuModel.UpdateContent</c> :660-673): the old wall stands
+    /// untouched until then and the successor is simply there, never a wall being built, and never two walls
+    /// on the screen at once.
     /// </remarks>
     private async Task ShowContentCoreAsync(MainMenuEntry? entry, int generation, CancellationToken cancellation,
         Task<bool> reading, List<HomeContentGroup> wall, List<HomeRow> rows, BuiltWall? standing)
@@ -1134,25 +1112,11 @@ namespace MediaPortal.Frontend.ViewModels
         return;
       }
 
-      // The way down, which the reading cannot be waited for afterwards: the fade has to happen between two walls
-      // that are both known, and by now the one being put up is. Waiting here costs the length of the fade and
-      // nothing else - the server has already answered.
-      Func<Task>? handover = WallHandover;
-      if (handover != null)
-      {
-        HomeTrace.Log("handover.ask", "gen=" + generation);
-        await handover();
-        HomeTrace.Log("handover.free", "gen=" + generation);
-      }
-
-      // And somebody can still have walked on during that fade, in which case the wall they left is not this one's
-      // business either.
-      if (generation != Volatile.Read(ref _contentGeneration) || cancellation.IsCancellationRequested)
-      {
-        HomeTrace.Log("stale", "gen=" + generation);
-        return;
-      }
-
+      // And nothing is waited for between that answer and the swap: the reference's step is one moment
+      // (<c>HomeMenuModel.UpdateContent</c> :660-673) - the old wall stands and faces the viewer through the
+      // settling, and the successor takes its place in the beat the answer arrives, on no curve at all. What
+      // used to be sunk and raised here was this port's own embellishment and nothing of the reference's, and
+      // the screen felt its length on every step.
       _paneEntry = entry;
       if (standing == null && standable && entry != null && !IsWeatherEntry(entry) && !IsNewsEntry(entry))
       {
@@ -1746,9 +1710,8 @@ namespace MediaPortal.Frontend.ViewModels
     {
       HomeTrace.Log("step", TraceLabel(entry));
 
-      // The standing wall starts leaving with the step, not with the answer that comes after the settling and the
-      // reading. Nothing here waits for it: the curve is written and the screen plays it out on its own.
-      WallLeaving?.Invoke();
+      // Nothing is done to the standing wall at the step: the reference keeps the old content facing the viewer
+      // for the whole settling and swaps at one moment when its successor is through (<see cref="ShowContentCoreAsync"/>).
 
       CancellationTokenSource next = new CancellationTokenSource();
       CancellationTokenSource? previous = Interlocked.Exchange(ref _pendingContentSelection, next);
@@ -2005,8 +1968,7 @@ namespace MediaPortal.Frontend.ViewModels
     /// two apart because its menu could not see how it had been moved; a pointer on this rail can be told from a
     /// walker, and a pointer cannot overshoot - a tile under a cursor is the tile the viewer meant. So the mouse
     /// is the reference's explicit case, and the settling stays where it always belonged: on the walk.
-    /// The standing wall is not cut in half by this - <see cref="WallHandover"/> waits for the fade the step has
-    /// already started, exactly as it does when the settling runs to its end.
+    /// A pick neither waits for nor interrupts anything of the standing wall - the wall is swapped, not faded.
     /// </remarks>
     public void ChooseEntryNow()
     {
