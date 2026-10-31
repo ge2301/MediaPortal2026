@@ -2263,7 +2263,10 @@ namespace MediaPortal.Frontend.Views
       {
         try
         {
-          await Task.Delay(TimeSpan.FromMilliseconds(TRAVEL_REST_BEAT_MILLISECONDS)).ConfigureAwait(false);
+          // No ConfigureAwait(false) here: the loop reads the scroller's offset below, and a ScrollViewer is a
+          // UI-thread object. Stranded on a pool thread that read throws, the fire-and-forget task faults
+          // unobserved, and the finalizer drops the process over it - so the wait resumes where it started.
+          await Task.Delay(TimeSpan.FromMilliseconds(TRAVEL_REST_BEAT_MILLISECONDS));
         }
         catch (Exception)
         {
