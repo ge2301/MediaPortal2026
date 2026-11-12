@@ -103,23 +103,10 @@
       </DataTemplate>
 
       <!--
-        One pair of what is known about a title: the answer, and the word under it, exactly as the reference's
-        detail panels wrote it (MediaItemListDetails.inc:109 - the answer first, the word under it in the smaller
-        size and at four tenths of its light). A pair is only ever in this list when the library knows the answer,
-        so the word never stands over an empty space.
+        One pair of what is known about a title is drawn by MediaFactTemplate, which lives in ShelfChrome.axaml now:
+        the column of words beside a wall of people wears the same table, and a pair written in two screens is a pair
+        that drifts.  The narrower cousin below stays here because only the cover flow asks for it.
       -->
-      <DataTemplate x:Key="MediaFactTemplate" x:DataType="vm:MediaBrowserFact">
-        <StackPanel Spacing="2" Margin="0,0,26,10">
-          <TextBlock Text="{Binding Value}"
-                     FontSize="22"
-                     Foreground="{DynamicResource TextBrush}"
-                     TextTrimming="CharacterEllipsis"/>
-          <TextBlock Text="{Binding Label}"
-                     FontSize="15"
-                     Foreground="{DynamicResource TextBrush}"
-                     Opacity="0.4"/>
-        </StackPanel>
-      </DataTemplate>
 
       <!--
         The same pair, measured for the gradient over the row of covers.  Nothing here may drink the column it
@@ -2146,7 +2133,8 @@
                   They used to be said twice, once as a sentence above the story and once here, and to wait at the
                   foot of the column below a band of nothing.
                 -->
-                <ItemsControl Grid.Row="2"
+                <ItemsControl Name="detailsFacts"
+                              Grid.Row="2"
                               Grid.ColumnSpan="2"
                               ItemsSource="{Binding DetailsFacts}"
                               ItemTemplate="{StaticResource MediaFactTemplate}"

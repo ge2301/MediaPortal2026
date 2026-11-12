@@ -321,14 +321,38 @@
             <Grid Name="detailsWords"
                   Margin="0,140,50,200"
                   VerticalAlignment="Top"
-                  RowDefinitions="Auto,*"
                   ColumnDefinitions="*,400"
                   ClipToBounds="True">
+              <Grid.RowDefinitions>
+                <!-- The head, which is said once: the name, in the shelf's letters for a name. -->
+                <RowDefinition Height="Auto"/>
+                <!-- The row the pairs of answers stand in, under the head and above the picture. -->
+                <RowDefinition Height="Auto"/>
+                <!--
+                  THE PICTURE'S ROW, sized by the picture it holds: the face is a written square of three hundred
+                  eighty lines under a margin of forty (MediaBrowserView.axaml, DetailsFace), so this row asks its
+                  child and gets four hundred and twenty - which is the shelf's row of "*" arrived at by measurement
+                  (DetailsPictureRowHeight) reduced to what a written square gives it, and it is told here as Auto on
+                  purpose: a row of "*" shares a height that the row under it has already taken by asking for its own
+                  words first, which is the loop that put a person's life OVER their face.  Its floor is the shelf's
+                  floor of a hundred sixty lines (DetailsPictureRowFloor), so that a row measured before the screen
+                  has a size still stands on something.
+                -->
+                <RowDefinition Height="Auto"
+                               MinHeight="160"/>
+                <!--
+                  The row the life is told in under its picture, which is the album's row for its story: the album's
+                  story is given "what is left and no more" (MediaBrowserView.FitStoryIntoThePanel), and here what is
+                  left is handed to the row directly by a row of "*", which needs no measuring to be safe because the
+                  row above it asks only for the picture it holds.  The same floor of a hundred sixty lines is worn,
+                  which is what a row of reading never shrinks below.
+                -->
+                <RowDefinition Height="*"
+                               MinHeight="160"/>
+              </Grid.RowDefinitions>
               <!--
-                The head: the name first, in the shelf's own letters for the name of a thing - forty-five points,
-                semi-bold, one line trimmed rather than three lines of it (MediaBrowserView.axaml, DetailsHeading)
-                - and under it the years and the place, which are a person's answer to the shelf's facts.  The
-                twelve between them is the shelf's head spacing, not a number beside the wall.
+                The head: the name, in the shelf's own letters for the name of a thing - four and forty points,
+                semi-bold, one line trimmed rather than three lines of it (MediaBrowserView.axaml, DetailsHeading).
               -->
               <StackPanel Grid.Row="0" Grid.ColumnSpan="2" Spacing="12">
                 <TextBlock Name="detailsName"
@@ -337,62 +361,115 @@
                            FontWeight="SemiBold"
                            TextTrimming="CharacterEllipsis"
                            Foreground="{DynamicResource TextBrush}"/>
-                <TextBlock Text="{Binding DetailsYears}"
-                           FontSize="19"
-                           Opacity="0.6"
-                           IsVisible="{Binding ShowsYears}"
-                           Foreground="{DynamicResource TextBrush}"/>
-                <!--
-                  The place, which no offline library ever answers: 369 artists and 7757 actors were never asked
-                  where they come from.  It therefore stands in the markup and stays away on screen - the reference
-                  hid the same row the same way, by the text's own existence rather than by a guess.
-                -->
-                <TextBlock Text="{Binding DetailsOrigin}"
-                           FontSize="19"
-                           Opacity="0.6"
-                           TextWrapping="Wrap"
-                           IsVisible="{Binding ShowsOrigin}"
-                           Foreground="{DynamicResource TextBrush}"/>
               </StackPanel>
 
               <!--
-                The life, cut the way a film's plot is cut.  The shelf says a title's body in its own measure -
-                twenty-two points, thirty-one between the lines, eight lines, wrapping, and the ellipsis at the end
-                of the eighth (MediaBrowserView.axaml, DetailsText) - and this column is the shelf's column with a
-                person's words in it, so it wears the same measure and the same ending.  Nothing of the wall's own
-                was invented for the longest life this household holds (eight thousand six hundred and thirty five
-                characters): the field is as high as eight lines, the words below the cut stay in the record, and
-                the three points say that a life continues past what the column shows.
-
-                It stands in the LEFT column of the picture's row and begins forty lines under the head, which is
-                the shelf's reading: its story column carries Margin="0,40,0,0" in the same row as its picture, so
-                the first line of the reading and the top edge of the picture are one edge.
+                What the library knows, in the shelf's table: the answer and the word under it, walked across the
+                width in a WrapPanel, in a band of its own under the head and over the whole column
+                (MediaBrowserView.axaml, the facts over Grid.Row 2 / ColumnSpan 2 with Margin 0,4,0,0; the pair
+                itself is MediaFactTemplate, which lives in ShelfChrome.axaml since both screens wear it).  A
+                birth date therefore stands as an answer with its word under it - as a title's "Length" and
+                "Genre" do - and not as a small line that some screen invented beside the wall.  A word never
+                stands over a blank: a name the library never gave a year leaves that pair out entirely.
               -->
-              <TextBlock Grid.Row="1"
-                         Grid.Column="0"
-                         Name="biographyWords"
-                         Text="{Binding DetailsBiography}"
-                         Margin="0,40,0,0"
-                         FontSize="22"
-                         LineHeight="31"
-                         MaxLines="8"
-                         TextWrapping="Wrap"
-                         TextTrimming="CharacterEllipsis"
-                         VerticalAlignment="Top"
-                         Opacity="0.9"
-                         IsVisible="{Binding ShowsBiography}"
-                         Foreground="{DynamicResource TextBrush}"/>
+              <ItemsControl Grid.Row="1"
+                            Grid.ColumnSpan="2"
+                            Name="detailsFacts"
+                            ItemsSource="{Binding DetailsFacts}"
+                            ItemTemplate="{StaticResource MediaFactTemplate}"
+                            Margin="0,4,0,0">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal"/>
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+              </ItemsControl>
+
+              <!--
+                The life, said the way the shelf says a title's plot.  The measure is the shelf's own - twenty three
+                points, thirty two between the lines, wrapping, the ellipsis where the words are cut, standing in a
+                scroller whose bars are off (MediaBrowserView.axaml, storyBox/plotScroller/detailsText) - and so is
+                the cut: the shelf cuts the plot to the room the panel has left, because that room is a measurement
+                and not a written number (MediaBrowserView.FitStoryIntoThePanel writes the box's MaxHeight and the
+                text's MaxLines from what is actually standing there).  This column does the same in
+                PeopleView.FitWordsIntoThePanel, so the longest life this household holds (eight thousand six hundred
+                and thirty five characters) costs the column neither more room than it has nor a line less than it fits.
+
+                It is told UNDER its picture, over the whole breadth of the column, which is what a record does:
+                an album's story is given the panel's whole width under the cover rather than the strip left of it
+                (MediaBrowserView.axaml, the row the story is told in once a disc lies under the cover - "a reading
+                that stops halfway across the panel with an empty column at its right hand side is a hole"), and a
+                person's life is read the same way as the tunes of that record are.  The forty between the cover's
+                foot and the first line is that row's own margin.
+
+                The row it stands in asks for nothing - a scroller is never asked what it wants - and wears the
+                shelf's floor of a hundred and sixty lines (MediaBrowserViewModel.DetailsStoryRowFloor), which is what
+                a row of reading never shrinks below.  Until this was measured the life stood in the box's row of "*" BEHIND its picture:
+                the picture took everything the head left, the row of "*" was what remained - nought lines at five
+                hundred eighty one by nought - and a whole life was in the panel with none of it to be seen.  The
+                shelf's own row for a picture takes everything the head and the facts leave (a row of "*"), and its
+                story asks for itself; those two are copied here rather than guessed at.
+              -->
+              <ScrollViewer Grid.Row="3"
+                            Grid.Column="0"
+                            Grid.ColumnSpan="2"
+                            Name="biographyScroller"
+                            Margin="0,40,0,0"
+                            HorizontalScrollBarVisibility="Disabled"
+                            VerticalScrollBarVisibility="Hidden"
+                            IsVisible="{Binding ShowsBiography}">
+                <TextBlock Name="biographyWords"
+                           Text="{Binding DetailsBiography}"
+                           FontSize="23"
+                           LineHeight="32"
+                           TextWrapping="Wrap"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource TextBrush}"/>
+              </ScrollViewer>
+
+              <!--
+                THE NAME'S OWN WRITING, at the left hand end of the picture's row: an album wears its lettering there
+                (MediaBrowserView.axaml, the Image over DetailsAlbumLettering with Height 120, MaxWidth 250, Margin
+                0,40,150,0, HorizontalAlignment Left, VerticalAlignment Top and its top edge on the cover's top edge,
+                which the reference wrote at MediaItemListAudioAlbumDetails.inc:26-31), and a name of the record shelf
+                is the same kind of thing.  The hundred fifty of right margin are dropped because they exist to keep
+                the writing out of the disc that stands behind an album's cover, and no disc stands behind a face.
+
+                It stands DOUBLE the album's size - two hundred forty lines rather than a hundred twenty, five hundred
+                across rather than two hundred fifty - which is what the viewer asked for and what this column can
+                give: the album's writing had to share a hundred forty pixel cover with the cover itself, while here
+                the writing has the whole left hand column of five hundred thirteen lines to itself and the face it
+                stands beside is three hundred eighty lines square.  Asked and decoded at the width it is drawn at
+                (six hundred and forty, the wall's own width) rather than at the album's two hundred and fifty six,
+                because a copy blown up twice across the screen is a blur by arithmetic.
+                It is asked as the album asks its own - ClearArt, and Logo when the import filed the lettering under
+                the second name.  A name the library holds no writing of leaves the place empty, which costs the
+                column nothing.
+              -->
+              <Image Grid.Row="2"
+                     Grid.Column="0"
+                     Name="detailsLettering"
+                     Source="{Binding DetailsLettering,
+                                      Converter={x:Static views:ArtworkConverter.Instance},
+                                      ConverterParameter=640}"
+                     Height="240"
+                     MaxWidth="500"
+                     Margin="0,40,0,0"
+                     Stretch="Uniform"
+                     HorizontalAlignment="Left"
+                     VerticalAlignment="Top"
+                     IsVisible="{Binding ShowsLetteringBesideFace}"/>
 
               <!--
                 THE FACE, in the picture's column, which is where the shelf stands its cover: Grid.Column 1, at the
-                right hand end of the column, forty lines under the head and twenty in from the reading, so that its
-                top edge is the reading's first line (MediaBrowserView.axaml, coverAlone and the album's coverOnDisc
-                - Margin 20,40,0,0, HorizontalAlignment Right, VerticalAlignment Top, a written box of three hundred
-                and eighty, CornerRadius ten, clipped).  The box is written rather than shrunk to the picture,
-                because a face is square on this screen here as it is square in every tile of the wall: it is cut
-                out of the middle of the photograph the same way the wall cuts it, so the same name wears the same
-                face at both places, and a picture column with an edge that does not move is what the reading next
-                to it is measured against.
+                right hand end of the column, forty lines under the head and twenty in from the column's left hand
+                reading (MediaBrowserView.axaml, coverAlone and the album's discAndCover/coverOnDisc - Margin
+                20,40,0,0, HorizontalAlignment Right, VerticalAlignment Top, a written box of three hundred and
+                eighty, CornerRadius ten, clipped).  The box is written rather than shrunk to the picture, because a
+                face is square on this screen here as it is square in every tile of the wall and as an album cover
+                is square: it is cut out of the middle of the photograph the same way the wall cuts it, so the same
+                name wears the same face at both places.  The life is told under it, over the whole breadth, as a
+                record's story is.
 
                 A person the library keeps no picture of does not leave the column's foot empty: the plate stands at
                 the same square and the actor's mark stands in its middle, so the ground a face would wear is still
@@ -400,7 +477,7 @@
                 decodes this front end keeps - rather than by the tile's small one, which at this breadth is a blur.
               -->
               <Border Name="detailsFace"
-                      Grid.Row="1"
+                      Grid.Row="2"
                       Grid.Column="1"
                       Classes="person-card"
                       Width="380"

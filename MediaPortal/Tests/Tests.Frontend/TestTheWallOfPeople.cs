@@ -22,6 +22,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -922,9 +923,11 @@ namespace Tests.Frontend
 
     /// <summary>
     /// The field and its keyboard button are one plate worn by two screens, so the wall has to wear the SHELF's
-    /// rules for them - the sizes, the glass, and the answers to the toolkit's own states.  A screen that carries
-    /// the classes but not the rules that go with them wears the toolkit's defaults and looks like a field someone
-    /// designed twice, which is the mistake this case stands watch over.
+    /// rules for them - the sizes, the glass in both of its states, and the answers to the toolkit's own states.  A
+    /// screen that carries the classes but not the rules that go with them wears the toolkit's defaults and looks
+    /// like a field someone designed twice, which is the mistake this case stands watch over.  The plate is read in
+    /// the state each number belongs to: shut for its quiet glass, open with the caret inside for the lit one, and
+    /// with its fades put away, because a plate caught mid-fade answers with the fade rather than with the rule.
     /// </summary>
     [AvaloniaTest]
     public void TheWallsFieldAndKeyboardButtonWearTheShelfsOwnPlate()
@@ -935,25 +938,40 @@ namespace Tests.Frontend
       window.Show();
       WaitUntil("the wall to fill", delegate { return wall.Rows.Count > 30; });
 
-      wall.OpenSearch();
+      // A still reading is taken from a still plate: the plaque fades its ground, its edge and its opacity over a
+      // hundred and twenty points of time as it grows into the head band, so a frame caught on the way reports a
+      // glass that is neither the quiet one nor the lit one - three readings of this plate came back as #33, #38
+      // and #3D of white.  The render probe puts its transitions away before it measures a plate for the same
+      // reason, and it does so BEFORE the plate is opened, because a fade already running is not stopped by
+      // taking the transitions off afterwards.
       TextBox box = window.GetVisualDescendants().OfType<TextBox>().First(field => field.Name == "searchBox");
       Border plaque = window.GetVisualDescendants().OfType<Border>().First(field => field.Name == "searchField");
       Button keys = window.GetVisualDescendants().OfType<Button>().First(mark => mark.Name == "keyboardToggle");
-      WaitUntil("the row to be laid", delegate { return plaque.Bounds.Width > 0; });
+      plaque.Transitions = null;
+      keys.Transitions = null;
 
-      // The plate GROWS into the head band, so its numbers are only read once it has come to rest: a frame caught
-      // mid-grow reports the height of the moment it was caught in rather than the height the plate was cut to -
-      // which is why the render probe puts the transitions away before it reads a plate.
+      // The quiet ground is read while the field is still shut, because opening it hands the caret to the field and
+      // a field the caret stands in is LIT - which is the shelf's own answer, not a fault of the wall's.  Read the
+      // other way round this case only ever passed by catching the plate mid-fade between the two states.
+      Assert.That(plaque.Background, Is.InstanceOf<ISolidColorBrush>(), "one ground, laid by one hand");
+      Assert.That(((ISolidColorBrush)plaque.Background!).Color, Is.EqualTo(Color.Parse("#33FFFFFF")),
+          "the wall's field is the shelf's third-of-white glass, not the toolkit's white slab");
+      Assert.That(plaque.CornerRadius.TopLeft, Is.EqualTo(6), "and it wears the same corner as that plate");
+
+      wall.OpenSearch();
+      WaitUntil("the row to be laid", delegate { return plaque.Bounds.Width > 0; });
+      WaitUntil("the caret to stand in the field", delegate { return box.IsFocused; });
       LetThePlateComeToRest(plaque, keys);
 
       // The numbers below are the shelf's: the plaque is the details row's plate asked to hold a question, so it
       // is forty-eight less five and six of corner, and the keyboard button is the same plate fifty-eight wide.
       Assert.That(plaque.Bounds.Height, Is.EqualTo(43),
           "the wall's plaque is as tall as the shelf's, five under the details row's plaques");
-      Assert.That(plaque.CornerRadius.TopLeft, Is.EqualTo(6), "and it wears the same corner as that plate");
-      Assert.That(plaque.Background, Is.InstanceOf<ISolidColorBrush>(), "one ground, laid by one hand");
-      Assert.That(((ISolidColorBrush)plaque.Background!).Color, Is.EqualTo(Color.Parse("#33FFFFFF")),
-          "the wall's field is the shelf's third-of-white glass, not the toolkit's white slab");
+      Assert.That(((ISolidColorBrush)plaque.Background!).Color, Is.EqualTo(Color.Parse("#4DFFFFFF")),
+          "and with the caret in it the plate lightens to the shelf's lit glass");
+      Assert.That(plaque.BorderThickness.Top, Is.EqualTo(3), "under a ring of whole white");
+      Assert.That(((ISolidColorBrush)plaque.BorderBrush!).Color, Is.EqualTo(Color.Parse("#FFFFFFFF")),
+          "which is the ring the shelf wears round the field it is standing in");
       Assert.That(keys.Bounds.Height, Is.EqualTo(43), "the keyboard button stands as tall as the plate beside it");
       Assert.That(keys.Bounds.Width, Is.EqualTo(58), "and as wide as the shelf wears it");
 
@@ -1410,11 +1428,15 @@ namespace Tests.Frontend
 
     /// <summary>
     /// A life longer than the column is cut where a film's plot is cut, by the shelf's own numbers rather than by a
-    /// measure invented beside the wall: twenty-two points of lettering, thirty-one between the lines, eight lines,
-    /// turning at the column's breadth, and the ellipsis at the end of the eighth (<c>MediaBrowserView.axaml</c>, the
-    /// block that speaks <c>DetailsText</c>).  Asked against a life of nine thousand characters, because that is the
-    /// length a record of this library reaches: eight lines hold however long the life is, and the record behind the
-    /// screen keeps every character of it.
+    /// measure invented beside the wall: twenty three points of lettering, thirty two between the lines, turning at
+    /// the column's breadth, ending in the ellipsis, and standing in a scroller whose bars are off
+    /// (<c>MediaBrowserView.axaml</c>, <c>storyBox</c>/<c>plotScroller</c>/<c>detailsText</c>).  How MANY lines that
+    /// is is deliberately not a number the markup knows: the shelf counts them out of the height its plot was
+    /// arranged at (<c>MediaBrowserView.FitStoryIntoThePanel</c>), and the wall does the same
+    /// (<c>PeopleView.FitLifeIntoTheColumn</c>), so this test asks whether the cut agrees with the room rather than
+    /// whether it agrees with a written eight.  Asked against a life of nine thousand characters, because that is the
+    /// length a record of this library reaches: however many lines the column has, the record behind the screen keeps
+    /// every character of the life.
     /// </summary>
     [AvaloniaTest]
     public void ALifeLongerThanTheColumnEndsWhereAFilmsPlotEnds()
@@ -1437,18 +1459,67 @@ namespace Tests.Frontend
       });
 
       TextBlock life = window.GetVisualDescendants().OfType<TextBlock>().First(word => word.Name == "biographyWords");
+      ScrollViewer life_room = window.GetVisualDescendants().OfType<ScrollViewer>()
+          .First(scroller => scroller.Name == "biographyScroller");
       LetTheRoomComeToRest();
 
-      Assert.That(life.FontSize, Is.EqualTo(22), "the life is lettered as a plot is lettered");
-      Assert.That(life.LineHeight, Is.EqualTo(31), "and its lines stand as far apart as a plot's stand");
-      Assert.That(life.MaxLines, Is.EqualTo(8), "eight lines, which is as much of a plot as a shelf shows");
+      Assert.That(life.FontSize, Is.EqualTo(23), "the life is lettered as a plot is lettered");
+      Assert.That(life.LineHeight, Is.EqualTo(32), "and its lines stand as far apart as a plot's stand");
       Assert.That(life.TextWrapping, Is.EqualTo(TextWrapping.Wrap), "the words turn at the column's breadth");
       Assert.That(life.TextTrimming, Is.EqualTo(TextTrimming.CharacterEllipsis),
-          "and what stands past the eighth line is said by three points rather than by a bar one has to work");
-      Assert.That(life.Bounds.Height, Is.LessThanOrEqualTo(8 * 31 + 1.0),
-          "so a nine thousand character life still covers eight lines on the screen and no more");
+          "and what stands past the room is said by three points rather than by a bar one has to work");
+      Assert.That(life_room.HorizontalScrollBarVisibility, Is.EqualTo(ScrollBarVisibility.Disabled),
+          "the life is given the plot's scroller, which never slides sideways");
+      Assert.That(life_room.VerticalScrollBarVisibility, Is.EqualTo(ScrollBarVisibility.Hidden),
+          "and whose bar down the side is hidden, as a plot's is");
+
+      // The cut itself: as many lines as the scroller was ARRANGED to show, counted the way the shelf counts them,
+      // and no line more.  A written number in the markup could only be right for one size of window.
+      int fits = (int)(life_room.Bounds.Height / life.LineHeight);
+      if (fits < 1)
+        fits = 1;
+      Assert.That(life.Bounds.Height, Is.GreaterThan(0),
+          "and something of the life actually stands on the screen - the row it is told in once measured nought high");
+      Assert.That(life.MaxLines, Is.EqualTo(fits),
+          string.Format("the words are cut to the lines the room holds ({0} lines of {1} in {2} points), not to a number of eight",
+              fits, life.LineHeight, life_room.Bounds.Height));
+      Assert.That(life.Bounds.Height, Is.LessThanOrEqualTo(life_room.Bounds.Height + 1.0),
+          "so a nine thousand character life still keeps to the room it was given");
       Assert.That(wall.DetailsBiography.Length, Is.GreaterThan(8000),
           "while the record behind the screen keeps the life whole, the cut being a matter of the screen");
+
+      window.Close();
+    }
+
+    /// <summary>
+    /// A name of the record shelf wears its own lettering where an album wears its own, and wears it DOUBLE the
+    /// album's size, which is what the viewer asked for and what this column can give: an album's writing had to fit
+    /// beside a cover inside two hundred and fifty lines (<c>MediaBrowserView.axaml</c>, the Image over
+    /// <c>DetailsAlbumLettering</c> at Height 120, MaxWidth 250), while the writing beside a face stands in the whole
+    /// left hand column of five hundred and thirteen and the face it stands beside is three hundred eighty lines
+    /// square.  Asked and decoded at the width it is drawn at rather than at an album's two hundred and fifty six,
+    /// because a copy blown up twice across the screen is a blur by arithmetic.
+    /// </summary>
+    [AvaloniaTest]
+    public void TheNamesOwnWritingStandsDoubleTheAlbumsAtItsPicturesHead()
+    {
+      WallServer server = new WallServer(6);
+      PeopleViewModel wall = AWall(PeopleShelf.Artists, server);
+      ShellWindow window = new ShellWindow(new PeopleView(wall, null, null));
+      window.Show();
+      WaitUntil("the wall to fill", delegate { return wall.Rows.Count > 3; });
+
+      Image lettering = window.GetVisualDescendants().OfType<Image>().First(writing => writing.Name == "detailsLettering");
+      Border face = window.GetVisualDescendants().OfType<Border>().First(frame => frame.Name == "detailsFace");
+
+      Assert.That(lettering.Height, Is.EqualTo(240), "twice the album's hundred and twenty lines of height");
+      Assert.That(lettering.MaxWidth, Is.EqualTo(500), "and twice its two hundred and fifty across");
+      Assert.That(Grid.GetRow(lettering), Is.EqualTo(Grid.GetRow(face)),
+          "it stands in the picture's own row, as the album's writing stands in its cover's row");
+      Assert.That(Grid.GetColumn(lettering), Is.LessThan(Grid.GetColumn(face)),
+          "at the left hand end of that row, where the album's stands at the left hand end of its cover");
+      Assert.That(lettering.VerticalAlignment, Is.EqualTo(Avalonia.Layout.VerticalAlignment.Top),
+          "with its top edge on the picture's top edge");
 
       window.Close();
     }
@@ -1507,12 +1578,13 @@ namespace Tests.Frontend
       Assert.That(face.Bounds.X, Is.GreaterThan(column.Bounds.X + column.Bounds.Width / 2),
           "and it is at the picture's hand of the column, not above the reading");
 
-      // The reading keeps the left hand column and begins on the picture's own top edge.
+      // The reading is told UNDER its picture, over the whole breadth of the column, which is what a record does:
+      // an album's story is given the panel's whole width under the cover rather than the strip left of it.
       Assert.That(life.Bounds.X, Is.EqualTo(column.Bounds.X).Within(1.0), "the life begins at the column's left edge");
-      Assert.That(life.Bounds.Y, Is.EqualTo(face.Bounds.Y).Within(1.0),
-          "and its first line is the picture's top edge, as a plot's first line is a poster's");
-      Assert.That(life.Bounds.Right, Is.LessThanOrEqualTo(face.Bounds.X + 1.0),
-          "it is told beside the picture and never under it");
+      Assert.That(life.Bounds.Y, Is.GreaterThanOrEqualTo(face.Bounds.Bottom),
+          "and it is told under the picture, as a record's story is, and never squeezed into the strip beside it");
+      Assert.That(life.Bounds.Width, Is.EqualTo(column.Bounds.Width).Within(1.0),
+          "over the whole breadth of the column of words");
 
       // A name the library keeps no face for still stands the plate at the same ground, so the column's shape is the
       // person's portrait rather than the record's luck.  Asked of a wall that never had a face - a name once seen
@@ -1541,6 +1613,128 @@ namespace Tests.Frontend
       Assert.That(plate.Bounds.Width, Is.EqualTo(380), "the plate wears the same box as a face does");
       Assert.That(plate.Bounds.Height, Is.EqualTo(380), "and the same square");
       Assert.That(plate.Bounds.Right, Is.EqualTo(bare_column.Bounds.Right).Within(1.0), "at the same hand's end");
+
+      bare_window.Close();
+    }
+
+    /// <summary>
+    /// What the library knows about a person is said in the shelf's <em>table of facts</em> - the answer, and the word
+    /// under it, in a band of its own between the name and the picture - rather than in a loose line some screen
+    /// invented beside the wall.  The pair is ONE definition worn by both screens (<c>MediaFactTemplate</c>, which
+    /// moved into <c>ShelfChrome.axaml</c> for exactly that reason), so the case measures the wall's rendered pairs
+    /// against the shelf's letters and guards in the source that no second pair is written anywhere and that both
+    /// screens say they read this one.  Measured against the two shapes
+    /// this household really holds: the artists carry a birth date as a year with a placeholder day (27 of 36 on the
+    /// living server, every one of them the first of January), the film actors carry no date at all, and a word may
+    /// never stand over a blank.
+    /// </summary>
+    [AvaloniaTest]
+    public void WhatIsKnownOfAPersonStandsInTheShelfsTableOfFacts()
+    {
+      WallServer server = new WallServer(6);
+      PeopleViewModel wall = AWall(PeopleShelf.FilmActors, server);
+      ShellWindow window = new ShellWindow(new PeopleView(wall, null, null));
+      window.Width = 1920;
+      window.Height = 1080;
+      window.Show();
+      WaitUntil("the wall to fill", delegate { return wall.Rows.Count > 3; });
+
+      ListBox names = window.GetVisualDescendants().OfType<ListBox>().First(list => list.Name == "peopleList");
+      WaitUntil("the names to be laid across the wall", delegate { return TheWallColumns(names) > 1; });
+      (names.ContainerFromIndex(0) as Control)?.Focus();
+      Pump();
+      PersonTile stood_on = wall.Rows.OfType<PersonTile>().First();
+      WaitUntil("the table to answer with the year the row carries", delegate
+      {
+        return wall.DetailsName == stood_on.Name && wall.DetailsFacts.Any(pair => pair.Label == "Born");
+      });
+      LetTheRoomComeToRest();
+
+      ItemsControl table = window.GetVisualDescendants().OfType<ItemsControl>()
+          .First(box => box.Name == "detailsFacts");
+      TextBlock name = window.GetVisualDescendants().OfType<TextBlock>().First(word => word.Name == "detailsName");
+      Border face = window.GetVisualDescendants().OfType<Border>().First(frame => frame.Name == "detailsFace");
+      Grid column = window.GetVisualDescendants().OfType<Grid>().First(box => box.Name == "detailsWords");
+
+      // The band stands between the name and the picture and has the column's whole breadth for its pairs.
+      Assert.That(table.Bounds.X, Is.EqualTo(column.Bounds.X).Within(1.0), "the table begins at the column's left edge");
+      Assert.That(table.Bounds.Width, Is.EqualTo(column.Bounds.Width).Within(1.0),
+          "and it has the whole breadth of the column, as the shelf's band has");
+      Assert.That(table.Bounds.Y, Is.GreaterThanOrEqualTo(name.Bounds.Bottom),
+          "it is said after the name");
+      Assert.That(table.Bounds.Bottom, Is.LessThanOrEqualTo(face.Bounds.Y + 1.0),
+          "and before the picture stands");
+
+      // A birth date is an answer with its word UNDER it, in the shelf's letters.
+      IList<TextBlock> words = table.GetVisualDescendants().OfType<TextBlock>().ToList();
+      TextBlock answer = words.First(word => word.Text == "1900");
+      TextBlock label = words.First(word => word.Text == "Born");
+      Assert.That(label.Bounds.Y, Is.GreaterThan(answer.Bounds.Y), "the word stands under its answer");
+      Assert.That(answer.FontSize, Is.EqualTo(22), "the answer wears the shelf's letters");
+      Assert.That(label.FontSize, Is.EqualTo(15), "and its word the shelf's smaller ones");
+      Assert.That(label.Opacity, Is.EqualTo(0.4).Within(0.01), "at four tenths of their light");
+      StackPanel pair_box = (StackPanel)answer.Parent;
+      Assert.That(pair_box.Spacing, Is.EqualTo(2), "an answer stands two points over its word, as in the shelf");
+      Assert.That(pair_box.Margin, Is.EqualTo(new Thickness(0, 0, 26, 10)),
+          "and the next pair is given the room the shelf gives it");
+
+      // The year only: a date the library holds as the first of January is a year, and a column that printed the
+      // placeholder would swear to a day nobody ever told it.
+      Assert.That(wall.DetailsFacts.First(pair => pair.Label == "Born").Value, Is.EqualTo("1900"),
+          "a year the library is all it knows is said as a year");
+      Assert.That(wall.DetailsFacts.Any(pair => pair.Label == "Occupation" && pair.Value == "Actor"), Is.True,
+          "and the trade the record names stands in the same band");
+      Assert.That(wall.DetailsFacts.All(pair => pair.Value.Trim().Length > 0), Is.True,
+          "no word of the band stands over an answer that is empty");
+
+      // One pair of answers for the whole household.  Avalonia builds a merged dictionary PER screen, so the wall's
+      // template and the shelf's are never the same object even when they are the same definition - which is why the
+      // guard is read off the source: exactly one file may define the pair, and both screens must say they read it.
+      string source = FrontendSource();
+      List<string> definers = new List<string>();
+      foreach (string file in Directory.EnumerateFiles(source, "*.axaml", SearchOption.AllDirectories))
+      {
+        if (file.Contains("\\obj\\") || file.Contains("/obj/"))
+          continue;
+        if (File.ReadAllText(file).Contains("x:Key=\"MediaFactTemplate\"", StringComparison.Ordinal))
+          definers.Add(Path.GetFileName(file));
+      }
+
+      Assert.That(definers, Is.EquivalentTo(new[] { "ShelfChrome.axaml" }),
+          "the pair of answers is defined once, in the chrome every screen wears - not once per screen");
+      foreach (string screen in new[] { "MediaBrowserView.axaml", "PeopleView.axaml" })
+      {
+        string markup = File.ReadAllText(Path.Combine(source, "Views", screen));
+        Assert.That(markup, Does.Contain("{StaticResource MediaFactTemplate}"),
+            screen + " dresses its answers in that one pair rather than in letters of its own");
+      }
+
+      window.Close();
+
+      // A name the library never gave a year wears no word over a blank - the ordinary case of 7543 film actors.
+      WallServer bare = new WallServer(4) { YearsHeld = 0 };
+      PeopleViewModel nameless = AWall(PeopleShelf.FilmActors, bare);
+      ShellWindow bare_window = new ShellWindow(new PeopleView(nameless, null, null));
+      bare_window.Width = 1920;
+      bare_window.Height = 1080;
+      bare_window.Show();
+      WaitUntil("the bare wall to fill", delegate { return nameless.Rows.Count > 1; });
+
+      ListBox bare_names = bare_window.GetVisualDescendants().OfType<ListBox>().First(list => list.Name == "peopleList");
+      WaitUntil("its names to be laid across the wall", delegate { return TheWallColumns(bare_names) > 1; });
+      (bare_names.ContainerFromIndex(0) as Control)?.Focus();
+      Pump();
+      PersonTile without_a_year = nameless.Rows.OfType<PersonTile>().First();
+      WaitUntil("the column to speak of a name the library never dated",
+          delegate { return nameless.DetailsName == without_a_year.Name; });
+      LetTheRoomComeToRest();
+
+      Assert.That(nameless.DetailsFacts.Any(pair => pair.Label == "Born"), Is.False,
+          "a year the library never told leaves its pair out of the band");
+      Assert.That(bare_window.GetVisualDescendants().OfType<ItemsControl>()
+              .First(box => box.Name == "detailsFacts").GetVisualDescendants().OfType<TextBlock>()
+              .Any(word => word.Text == "Born"),
+          Is.False, "and no word for it reaches the screen either");
 
       bare_window.Close();
     }
@@ -1748,6 +1942,19 @@ namespace Tests.Frontend
     private static int TheWallColumns(ListBox names)
     {
       return names.GetVisualDescendants().OfType<VirtualizingTilePanel>().FirstOrDefault()?.Columns ?? 1;
+    }
+
+    /// <summary>The front end's own source, which the test project names in its metadata.</summary>
+    private static string FrontendSource()
+    {
+      AssemblyMetadataAttribute? value = typeof(TestTheWallOfPeople).Assembly
+          .GetCustomAttributes<AssemblyMetadataAttribute>()
+          .FirstOrDefault(attribute => attribute.Key == "FrontendSource");
+      Assert.That(value?.Value, Is.Not.Null.And.Not.Empty,
+          "the test project says nothing about the front end's source, so this test has nothing to read");
+      string path = Path.GetFullPath(value!.Value!);
+      Assert.That(Directory.Exists(path), Is.True, "the folder it names is not a directory");
+      return path;
     }
 
     /// <summary>

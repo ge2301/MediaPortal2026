@@ -166,6 +166,13 @@ namespace MediaPortal.Frontend.Views
         FitWordsIntoThePanel();
       };
 
+      // The height the words' box is handed moves the top edge of the life below it, and the life's own height is
+      // what its cut is counted in - so each time either of them is laid out, the fitting is asked for again.  This
+      // is the shelf's own pair of hooks (MediaBrowserView: detailsWords.SizeChanged and plotScroller.SizeChanged
+      // both ask for FitStoryIntoThePanel), and it is why the cut is never derived from a number in markup.
+      detailsWords.SizeChanged += delegate { RefitWords(); };
+      biographyScroller.SizeChanged += delegate { RefitWords(); };
+
       peopleList.SelectionChanged += delegate
       {
         // A caret walking into the last quarter of the names that arrived is the moment to ask for more, which is
@@ -1026,10 +1033,30 @@ namespace MediaPortal.Frontend.Views
 
       Point stood = detailsWords.TranslatePoint(new Point(0, 0), this) ?? new Point(0, -1);
       double room = ShelfDetailsColumn.WordsHeightFor(height, stood.Y);
-      if (double.IsNaN(room) || (!double.IsNaN(detailsWords.Height) && Math.Abs(detailsWords.Height - room) < 0.5))
-        return;
+      if (!double.IsNaN(room) && Math.Abs(detailsWords.Height - room) > 0.5)
+        detailsWords.Height = room;
 
-      detailsWords.Height = room;
+      FitLifeIntoTheColumn();
+    }
+
+    /// <summary>
+    /// Cuts the life to the lines the row under the picture can actually show, which is the second half of the
+    /// shelf's law for a plot (MediaBrowserView.FitStoryIntoThePanel): the number of lines is counted out of the
+    /// height the scroller was ARRANGED at, never out of a number written in markup, because how much of the panel
+    /// reaches below the picture is only known once the panel has been laid out.  The first half of that law - the
+    /// box's MaxHeight - is not needed here and is deliberately not copied: the person's picture is a written square
+    /// rather than a cover the view model sizes, so the row under it is a row of "*" that cannot be argued with, and
+    /// writing a height derived from the box's own arranged position back onto that box is a loop that settles on a
+    /// wrong answer (which is exactly how a life once came to stand over its own picture).
+    /// </summary>
+    private void FitLifeIntoTheColumn()
+    {
+      double line = biographyWords.LineHeight;
+      int lines = line > 0 ? (int)(biographyScroller.Bounds.Height / line) : 0;
+      if (lines < 1)
+        lines = 1;
+      if (biographyWords.MaxLines != lines)
+        biographyWords.MaxLines = lines;
     }
 
     /// <summary>

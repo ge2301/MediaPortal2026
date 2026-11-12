@@ -6516,12 +6516,22 @@ rear.
 its own, which was a thing invented beside the wall rather than taken from the shelf - the user's answer, when asked how a
 life of eight thousand characters should be presented, was „wie bei movies, unten mit definiertem gap abschneiden mit
 '...'. Nichts neu erfinden, halten an das was wir haben". The shelf says a title's body in one measure
-(`MediaBrowserView.axaml`, the block that speaks `DetailsText`): twenty-two points, thirty-one between the lines,
-eight lines, wrapping, `TextTrimming="CharacterEllipsis"`. The life now wears exactly that, and the scroller is gone.
-Measured against the living server with the longest life the wall reaches that a keyboard can type - „Joe Jackson", 5670
-characters - the block stands `913x248`, which is eight lines of thirty-one and no more, while the record behind the
-screen still holds all 5670 characters. A test holds the measure and the height, asked against a life of nine thousand
-characters rather than a sentence.
+(`MediaBrowserView.axaml`, `storyBox`/`plotScroller`/`detailsText`): twenty three points, thirty two between the lines,
+wrapping, `TextTrimming="CharacterEllipsis"`, standing in a scroller sideways `Disabled` and with the bar down its side
+`Hidden` - and it cuts that body to as many lines as the room holds, counted out of the height the plot was ARRANGED at
+(`MediaBrowserView.FitStoryIntoThePanel`), never out of a number the markup knows. The life now wears that plate and that
+counting (`PeopleView.axaml`, `biographyScroller`/`biographyWords`; `PeopleView.FitLifeIntoTheColumn`), so the cut is
+right in a seven hundred and twenty line window and in a sixteen hundred line one without either number being written.
+Two things had to be settled for the room to exist at all: the picture's row is `Auto` (the face is a written square of
+three hundred eighty under a margin of forty, so the row asks its child and gets four hundred and twenty) and the life's
+row is `*` with the shelf's floor of a hundred sixty - because the shelf's own first half, writing a `MaxHeight` derived
+from the box's own arranged position back onto that box, is a loop that settles on a wrong answer, and the wrong answer
+it settled on here put a person's whole life OVER their face and measured the reading row nought high. Measured against
+the living server at 1920x1080 on the longest life the wall reaches from a keyboard - „Adele", 8635 characters - the life
+stands at `y 621, h 512` under a face at `y 201, h 380`, where before the row law it stood `581x0`: in the column, none of
+it on the screen. Two tests hold the law: the plate, the lettering's size and the count agreeing with the room rather
+than with a written eight (`ALifeLongerThanTheColumnEndsWhereAFilmsPlotEnds`, asked against a life of nine thousand
+characters), and the life keeping to the room it was given.
 
 **The wall may be asked to leave a name out.** Sammeleinträge - "Various Artists", "Unbekannter Interpret" - are nobody's
 work, and the user's answer to what a wall of artists should do with them was „Raus per Standardfilter, aber im Filter-Menü
@@ -6545,15 +6555,36 @@ column, the wall had invented one of its own: the face standing first at the lef
 name *under* it in 31 points, and the life under the name across the whole breadth. The shelf says the same thing the
 other way round - a name is the first thing said (`MediaBrowserView.axaml`, `DetailsHeading`: 45 points, semi-bold, one
 line trimmed), the picture stands in a written column of 400 at the right hand end of the words (`Margin="20,40,0,0"`,
-`HorizontalAlignment="Right"`, `VerticalAlignment="Top"`, a box of 380 with the tiles' corner of ten), and the reading
-is told in the column left of it, beginning on the picture's own top edge. The wall wears that now, number for number:
-its head spans both columns and starts with the name, its plate wears the album cover's square of 380 at the column's
-right edge, and the life stands beside it, both forty lines under the head. Measured against the living server, the
-wall's column and the shelf's are the same box (`detailsPanel` at x 649, w 631 in both; `detailsWords` at x 649 y 44,
-w 581 in both) and the face's right edge lands on the column's right edge (850 + 380 = 1230 = 649 + 581). A name the
-library keeps no picture of stands the plate at the same square, so the column's shape is the person's portrait and not
-the record's luck. One test holds the arrangement (`TheColumnOfAPersonStandsAsTheShelfStandsItsDetails`), asked at
-1920×1080 against the fake library and checked again for a name without a face.
+`HorizontalAlignment="Right"`, `VerticalAlignment="Top"`, a box of 380 with the tiles' corner of ten), and the reading is
+told in what is left of the panel. The wall wears that now, number for number: its head spans both columns and starts
+with the name, its plate wears the album cover's square of 380 at the column's right edge, and - after a second pass in
+which the user pointed out that an album's description is not told beside its cover either - the life is told UNDER the
+face, over the whole breadth of the column, which is what the shelf does for a record: a reading that stops halfway
+across the panel with an empty column at its right hand side is a hole.
 
-`Tests.Frontend/TestTheWallOfPeople.cs` **33 tests green**.
+**What is known of a person stands in the shelf's table of facts.** Born, died, place and trade are not four lines this
+screen wrote for itself; they are the shelf's `MediaFactTemplate` - answer 22 points, word 15 points at 0.4, pair
+`Spacing 2`, `Margin 0,0,26,10` - which now has ONE definition (`ShelfChrome.axaml`) worn by both screens, after the
+wall's own copy came out. A word never stands over a blank: a name the library never gave a year leaves that pair out
+entirely, and a date the library gave as the first of January is said as the year alone.
+
+**An artist wears the record shelf's lettering, double.** A name of the record shelf whose library holds its ClearArt
+(or its Logo, which is what this household's import filed - measured: 3 ClearArts against 39 Logos over 43 albums, and
+for „Adele" the Logo door answering while ClearArt answers 404) stands that writing at the left hand end of the
+picture's row, exactly where an album wears its own. It wears it DOUBLE the album's measure - 240 high and 500 across
+rather than 120 and 250 - because an album's writing had to share a hundred forty pixel cover while this column gives
+the writing five hundred and thirteen lines of its own beside a face of three hundred eighty; and it is asked and decoded
+at 640 (`PictureWidths.COVER`) rather than at the album's 256, since a copy blown up twice is a blur by arithmetic.
+Measured at 1920x1080 against the living server, `detailsLettering` stands `427x240` at `x 957 y 201` with the face at
+`x 1490 y 201 380x380` - the same row, the writing's top edge on the face's top edge.
+
+Measured with the render probe at 1920x1080 against the living server, the wall's column and the shelf's are the same
+box and the same head: `detailsWords` at `x 957 y 44, w 913, h 1089`, `detailsName` `h 55`, `detailsFacts` `y 103 h 58`,
+the face's right edge landing on the column's right edge (1490 + 380 = 1870, the words' own right edge). A name the
+library keeps no picture of stands the plate at the same square, so the column's shape is the person's portrait and not
+the record's luck. Tests hold the arrangement, the single table definition in the source of both screens, and the
+lettering's double measure and its place at the picture's head.
+
+`Tests.Frontend/TestTheWallOfPeople.cs` **35 tests** - the count standing after the life's cut was re-told to the plot's
+plate and the lettering's double measure was added; the green count of the next run belongs to that run.
 

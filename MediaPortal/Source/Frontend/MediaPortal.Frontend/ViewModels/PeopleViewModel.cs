@@ -558,6 +558,27 @@ namespace MediaPortal.Frontend.ViewModels
     [ObservableProperty]
     private byte[]? _detailsPortrait;
 
+    /// <summary>
+    /// The stood-on name's own writing, which is what an album wears beside its cover: the library's <em>ClearArt</em>
+    /// for that name, or its <em>Logo</em> when the import filed the second kind instead - the same two answers, in
+    /// the same order, that an album's lettering is read out of
+    /// (<c>MediaBrowserViewModel.ReadDetailsClearArtAsync</c>, which measured 3 ClearArts against 39 Logos over 43
+    /// albums).  A person's writing is asked under the PERSON's own id, where the pictures of the import lie: measured
+    /// over this household, the artist Adele answers no ClearArt and a Logo of three hundred seventy six thousand
+    /// bytes, so an ask of the reference's name alone would leave the writing off every screen in the house.
+    /// </summary>
+    [ObservableProperty]
+    private byte[]? _detailsLettering;
+
+    /// <summary>
+    /// What the library knows about the stood-on person, in the pairs the shelf prints its facts in - the answer, and
+    /// the word under it (<c>MediaFactTemplate</c>, ShelfChrome.axaml).  A person's column is the shelf's column, so
+    /// a birth date is not a small line under a name but an answer with its word under it, standing in the same band
+    /// as a title's "Length" and "Genre" stand in.  A pair is only added when the answer is known, which is the
+    /// shelf's rule: of this household's 7543 film actors not one carries a year, while 27 of its 36 artists do.
+    /// </summary>
+    public ObservableCollection<MediaBrowserFact> DetailsFacts { get; } = new ObservableCollection<MediaBrowserFact>();
+
     /// <summary>Whether the years have anything to say.</summary>
     public bool ShowsYears => DetailsYears.Length > 0;
 
@@ -570,11 +591,18 @@ namespace MediaPortal.Frontend.ViewModels
     /// <summary>Whether the column draws a face rather than the skin's standing figure.</summary>
     public bool ShowsPortrait => DetailsPortrait != null;
 
+    /// <summary>
+    /// Whether a writing stands at the left hand end of the face's row, which is where an album's writing stands at
+    /// the left hand end of its cover's row.
+    /// </summary>
+    public bool ShowsLetteringBesideFace => DetailsLettering != null;
+
     partial void OnDetailsNameChanged(string value) => OnPropertyChanged(nameof(ShowsDetailsWords));
     partial void OnDetailsYearsChanged(string value) => OnPropertyChanged(nameof(ShowsYears));
     partial void OnDetailsOriginChanged(string value) => OnPropertyChanged(nameof(ShowsOrigin));
     partial void OnDetailsBiographyChanged(string value) => OnPropertyChanged(nameof(ShowsBiography));
     partial void OnDetailsPortraitChanged(byte[]? value) => OnPropertyChanged(nameof(ShowsPortrait));
+    partial void OnDetailsLetteringChanged(byte[]? value) => OnPropertyChanged(nameof(ShowsLetteringBesideFace));
 
     /// <summary>
     /// The caret stood on another name, which is the one moment the column changes its subject: nothing here is
@@ -642,6 +670,8 @@ namespace MediaPortal.Frontend.ViewModels
       DetailsOrigin = "";
       DetailsBiography = "";
       DetailsPortrait = null;
+      DetailsLettering = null;
+      DetailsFacts.Clear();
     }
 
     /// <summary>
@@ -661,6 +691,8 @@ namespace MediaPortal.Frontend.ViewModels
       DetailsOrigin = "";
       DetailsBiography = "";
       DetailsPortrait = null;
+      DetailsLettering = null;
+      FillFacts(person.BornDate, person.DeathDate, "", person.Occupation);
 
       ServerApiClient? client = _client;
       if (client == null || !ShowDetails)
@@ -670,6 +702,11 @@ namespace MediaPortal.Frontend.ViewModels
       // answer, a face is a short one, and a column that showed its face only once the life had arrived kept a
       // nameless plate in front of a viewer who had already read the name next to it.
       Task face_errand = ReadFaceAsync(person.Id, asked);
+
+      // The writing goes after the face rather than behind it: to the shelf of pictures the two are one errand, being
+      // two kinds of the same name's own files, and a column that dressed its face before it knew whether the name
+      // had a writing would have to move the face once the writing arrived.
+      Task writing_errand = ReadLetteringAsync(person.Id, asked);
 
       try
       {
@@ -690,6 +727,8 @@ namespace MediaPortal.Frontend.ViewModels
         DetailsYears = YearsOf(life.BornDate ?? person.BornDate, life.DeathDate ?? person.DeathDate);
         DetailsOrigin = life.Place;
         DetailsBiography = life.Life;
+        FillFacts(life.BornDate ?? person.BornDate, life.DeathDate ?? person.DeathDate, life.Place,
+            life.Occupation ?? person.Occupation);
       }
       catch (Exception)
       {
@@ -701,6 +740,7 @@ namespace MediaPortal.Frontend.ViewModels
         // Waited for on every road out of here - including the two that returned early - so that the picture is
         // never a task nobody owns.  It answers for itself either way; this only keeps the column's errands told.
         await face_errand.ConfigureAwait(true);
+        await writing_errand.ConfigureAwait(true);
       }
     }
 
@@ -737,6 +777,71 @@ namespace MediaPortal.Frontend.ViewModels
       catch (Exception)
       {
         // The same answer for anything else: the column keeps the standing figure it was drawing.
+      }
+    }
+
+    /// <summary>
+    /// The width the name's own writing is asked of the server and decoded at: the column draws it up to five hundred
+    /// lines across (PeopleView.axaml, detailsLettering), so the copy must be at least that wide, which is the wall's
+    /// six hundred and forty rather than the two hundred and fifty six an album's smaller writing is content with.
+    /// The markup's ConverterParameter says the same number by hand, and the two have to agree: a picture warmed at
+    /// one width and drawn at another is decoded twice, once of it on the thread that draws.
+    /// </summary>
+    const int LETTERING_WIDTH = PictureWidths.COVER;
+
+    /// <summary>
+    /// Asks the one writing the column draws, out of the two answers the library files it under: the name's ClearArt,
+    /// or its Logo when the import wrote the second kind.  Nothing is written when neither is filed, which is the
+    /// state of every film actor of this household and of most of its record shelves.
+    /// </summary>
+    /// <remarks>
+    /// The kinds are asked one after the other rather than both at once, which is the shelf's own order for them and
+    /// keeps the picture queue free for the faces of the names around the caret; a name whose ClearArt arrived never
+    /// asks for its Logo.
+    /// </remarks>
+    private async Task ReadLetteringAsync(Guid person, long asked)
+    {
+      foreach (string kind in new[] { "ClearArt", "Logo" })
+      {
+        Artwork? holder = PersonLetteringOf(kind);
+        if (holder == null)
+          return;
+
+        byte[]? lettering;
+        try
+        {
+          lettering = await holder.LoadAsync(person).ConfigureAwait(true);
+        }
+        catch (ServerApiException)
+        {
+          // Nothing of this kind under this name, which is a library answering plainly rather than failing.
+          continue;
+        }
+        catch (Exception)
+        {
+          return;
+        }
+
+        // The caret walked on while this was on the wire, and the writing of a name nobody stands on any more is not
+        // to be laid over the name that is.
+        if (asked != _detailsAsked)
+          return;
+
+        if (lettering == null)
+          continue;
+
+        // Decoded off the thread that draws, at the width the column draws it, exactly as the album's writing is.
+        if (!Views.ArtworkConverter.Instance.Remembers(lettering, LETTERING_WIDTH))
+        {
+          await Task.Run(delegate
+          {
+            Views.ArtworkConverter.Instance.Warm(lettering, LETTERING_WIDTH);
+          }).ConfigureAwait(true);
+        }
+
+        if (asked == _detailsAsked)
+          DetailsLettering = lettering;
+        return;
       }
     }
 
@@ -843,6 +948,35 @@ namespace MediaPortal.Frontend.ViewModels
           id => client.GetFanArtAsync(id, "Thumbnail", null, PictureWidths.SMALL));
     }
 
+    /// <summary>One holder per kind of a person's own pictures, made the first time that kind is wanted.</summary>
+    private readonly Dictionary<string, Artwork?> _person_pictures =
+        new Dictionary<string, Artwork?>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The holder of one kind of a name's own writing: the ClearArt the reference asked for, or the Logo an import
+    /// writes when it files the lettering under its second name.
+    /// </summary>
+    /// <remarks>
+    /// The two kinds are kept on shelves of their own, named for the PERSON rather than shared with the album's
+    /// ClearArt, for the one law this screen's pictures are kept by: a person's id and a title's id are two libraries
+    /// that happen to be asked with the same numbers, and a writing handed over from the wrong one of them is some
+    /// record's lettering standing over a person's column.
+    /// </remarks>
+    private Artwork? PersonLetteringOf(string asked_kind)
+    {
+      string shelf_kind = "Person" + asked_kind;
+      if (_person_pictures.TryGetValue(shelf_kind, out Artwork? known))
+        return known;
+
+      ServerApiClient? client = _client;
+      Artwork? made = client == null
+          ? null
+          : PicturesOf(client, PictureWidths.Shelf(shelf_kind, LETTERING_WIDTH),
+              id => client.GetFanArtAsync(id, asked_kind, null, LETTERING_WIDTH));
+      _person_pictures[shelf_kind] = made;
+      return made;
+    }
+
     /// <summary>
     /// The holder of the room's pictures: a person's fanart whole, across the width the screen is painted at.
     /// </summary>
@@ -885,6 +1019,48 @@ namespace MediaPortal.Frontend.ViewModels
       return died == null
           ? first
           : first + " - " + died.Value.Year.ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// The band of what is known about the stood-on person, in the shelf's own pairs - the answer, and the word under
+    /// it (<c>MediaFactTemplate</c>, ShelfChrome.axaml).  A pair stands only when the library knows the answer, which
+    /// is the shelf's rule (<c>MediaBrowserViewModel.FillDetailsFacts</c>) and the only honest one beside a wall: of
+    /// this household's 7543 film actors not one carries a year, so their columns wear no word over a blank.
+    /// </summary>
+    private void FillFacts(DateTime? born, DateTime? died, string place, string? occupation)
+    {
+     DetailsFacts.Clear();
+     AddFact("Born", DateWord(born));
+     AddFact("Died", DateWord(died));
+     AddFact("From", place);
+     AddFact("Occupation", TradeWord(occupation));
+    }
+
+    /// <summary>One pair of that band, left out altogether when the library never told the answer.</summary>
+    private void AddFact(string label, string value)
+    {
+     if (string.IsNullOrWhiteSpace(value))
+       return;
+
+     DetailsFacts.Add(new MediaBrowserFact(label, value.Trim()));
+    }
+
+    /// <summary>
+    /// A date as the shelf writes a date - the whole day <c>yyyy-MM-dd</c>, the shape of its "First aired" and
+    /// "Released" answers - or the year alone when that is all the library holds.  Measured rather than assumed: all
+    /// 27 artists of this household that carry a birth date carry it as the first of January (Adele
+    /// <c>1988-01-01</c>), which is how a tag writer's year lands in a date column, and a column printing
+    /// "1988-01-01" would swear to a day nobody was ever told.
+    /// </summary>
+    private static string DateWord(DateTime? date)
+    {
+     if (date == null)
+       return string.Empty;
+
+     DateTime value = date.Value;
+     return value.Month == 1 && value.Day == 1
+         ? value.Year.ToString(CultureInfo.InvariantCulture)
+         : value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
     }
 
     /// <summary>Whether the wall is one wall rather than a run of plates.</summary>

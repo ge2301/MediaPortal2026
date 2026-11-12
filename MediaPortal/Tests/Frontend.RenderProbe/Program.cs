@@ -3102,7 +3102,10 @@ namespace FrontendProbe
         foreach (Control panel in window.GetVisualDescendants().OfType<Control>())
         {
           if (panel.Name != "detailsPanel" && panel.Name != "peopleList" && panel.Name != "room"
-              && panel.Name != "detailsWords" && panel.Name != "detailsFace" && panel.Name != "titlesList")
+              && panel.Name != "detailsWords" && panel.Name != "detailsFace" && panel.Name != "titlesList"
+              && panel.Name != "detailsName" && panel.Name != "detailsFacts" && panel.Name != "detailsLettering"
+              && panel.Name != "biographyWords" && panel.Name != "biographyScroller"
+              && panel.Name != "coverOnDisc" && panel.Name != "coverAlone")
             continue;
 
           Point here = panel.TranslatePoint(new Point(0, 0), (Visual)window!) ?? default;
