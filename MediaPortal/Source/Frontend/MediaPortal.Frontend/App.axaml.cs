@@ -1711,24 +1711,78 @@ namespace MediaPortal.Frontend
     /// its view, it pages, it opens the title they press. The wall and the shelf differ in what they ask the server
     /// for, not in what they are.
     /// </remarks>
-    private Task<Workflow.WorkflowFrame?> PersonWorksAsync(PeopleViewModel wall, PersonTile person)
+    private async Task<Workflow.WorkflowFrame?> PersonWorksAsync(PeopleViewModel wall, PersonTile person)
     {
-      HomeSection? section = null;
-      foreach (HomeSection candidate in _home.Sections)
+      // Said on the console as well as pushed onto the workflow, because a press that opens nothing looks exactly
+      // like a press that was never received - the titles screen prints its "inside:" line for the same reason.
+      HomeSection? section = SectionForAspect(wall.AspectName);
+
+      if (section == null && _home.Client != null)
       {
-        if (string.Equals(candidate.Aspect?.Name, wall.AspectName, StringComparison.OrdinalIgnoreCase))
-        {
-          section = candidate;
-          break;
-        }
+        // The home's own lists are still empty on a front end that walked straight into a shelf - the wake-up's
+        // "last shelf", a tile pressed before the counts arrived - and a name pressed then is the same name pressed
+        // at any other moment: the kind of shelf is asked of the server rather than answered with nothing.
+        section = await SectionOfServerAsync(wall.AspectName);
       }
 
       if (section == null || _home.Client == null)
-        return Task.FromResult<Workflow.WorkflowFrame?>(null);
+      {
+        Console.WriteLine("works:    \"" + person.Name + "\" was asked for their " + wall.AspectName
+            + ", which this build cannot open - no shelf of that kind answered");
+        return null;
+      }
+
+      Console.WriteLine("works:    " + person.Name + " - " + section.Label + " cut to who="
+          + person.Id.ToString("D") + " roles=" + string.Join(",", wall.Roles));
 
       MediaBrowserViewModel works = new MediaBrowserViewModel(_home.Client, section, null, _home.Pictures);
       works.WearsPerson(person.Id, wall.Roles);
-      return Task.FromResult<Workflow.WorkflowFrame?>(TitlesFrame(works, person.Name));
+      return TitlesFrame(works, person.Name);
+    }
+
+    /// <summary>
+    /// The shelf of one kind of media as this build opens it: out of the home screen's tiles, or - when the tiles
+    /// were not built yet - out of the aspects the home screen read from the server.  Null for a kind this server
+    /// holds no shelf of.
+    /// </summary>
+    private HomeSection? SectionForAspect(string aspectName)
+    {
+      foreach (HomeSection candidate in _home.Sections)
+      {
+        if (string.Equals(candidate.Aspect?.Name, aspectName, StringComparison.OrdinalIgnoreCase))
+          return candidate;
+      }
+
+      foreach (AspectViewModel candidate in _home.Aspects)
+      {
+        if (string.Equals(candidate.Name, aspectName, StringComparison.OrdinalIgnoreCase))
+          return new HomeSection(HomeSection.LabelFor(candidate.Name), candidate);
+      }
+
+      return null;
+    }
+
+    /// <summary>
+    /// The same question asked of the server, for the moment before the home screen has read anything.
+    /// </summary>
+    private async Task<HomeSection?> SectionOfServerAsync(string aspectName)
+    {
+      try
+      {
+        LibraryAspects answered = await _home.Client!.GetLibraryAspectsAsync(CancellationToken.None);
+        foreach (MediaAspect aspect in answered.Aspects ?? Array.Empty<MediaAspect>())
+        {
+          if (string.Equals(aspect.Name, aspectName, StringComparison.OrdinalIgnoreCase))
+            return new HomeSection(HomeSection.LabelFor(aspect.Name), new AspectViewModel(aspect));
+        }
+      }
+      catch (ServerApiException)
+      {
+        // A server that cannot name its aspects cannot say whose records these are either.  The press says so on the
+        // console, which is the only place a press that opened nothing can say anything.
+      }
+
+      return null;
     }
 
     /// <summary>

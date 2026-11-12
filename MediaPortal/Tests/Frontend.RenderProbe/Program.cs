@@ -78,6 +78,10 @@ namespace FrontendProbe
         "  --aspect <name>  which aspect the library screen lists when a server was given (default MovieItem)\n" +
         "  --person <name>  with --screen people: search the wall for this name and stand the caret on the first\n" +
         "                   answer, which is how a frame is got of the details column reading a real life\n" +
+        "  --press-person <name|first>  with --screen details: key the Enter of the people card of that name in the\n" +
+        "                   info panel, which is the walk from a title onto a person's own wall - the probe then\n" +
+        "                   says which wall the workflow arrived on, what it asked the server, and where the caret\n" +
+        "                   came to rest\n" +
         "  --group <word>   with --screen people: stand the wall under a plate first (letter|born), which is how a\n" +
         "                   grouped wall is got on the frame - and how a plate's WORDS are looked at for real\n" +
         "  --nodetails      with --screen people: turn the column of words away, which is when the line at the\n" +
@@ -149,6 +153,11 @@ namespace FrontendProbe
       string screenName = "home";
       string aspectName = "MovieItem";
       string? personWanted = null;
+      string? pressPerson = null;
+
+      // The workflow the info screen is opened ON, so that a pressed person card has somewhere to push its wall to
+      // and the probe can say what arrived.  Null for every other frame, which is how those frames were always run.
+      WorkflowManager? pressFlow = null;
       string? groupWanted = null;
       string? layoutWord = null;
       string? theme = null;
@@ -209,6 +218,11 @@ namespace FrontendProbe
             if (i + 1 >= args.Length || string.IsNullOrWhiteSpace(args[i + 1]))
               return Usage("--person needs a name the wall can be searched for.");
             personWanted = args[++i].Trim();
+            break;
+          case "--press-person":
+            if (i + 1 >= args.Length || string.IsNullOrWhiteSpace(args[i + 1]))
+              return Usage("--press-person needs a name, or \"first\", for the card of the info screen to press.");
+            pressPerson = args[++i].Trim();
             break;
           case "--inside":
             if (i + 1 >= args.Length || !Guid.TryParse(args[i + 1], out insideTitle))
@@ -1219,7 +1233,12 @@ namespace FrontendProbe
             || screenName.Equals("covermenu", StringComparison.Ordinal);
         menuAsked = screenName.Equals("menu", StringComparison.Ordinal)
             || screenName.Equals("covermenu", StringComparison.Ordinal);
-        window = new ShellWindow(new MediaBrowserView(browser));
+        // A pressed person card pushes its wall onto the workflow, so the view needs a flow at all.  It gets one of
+        // its own rather than the window's: the frame stays the info screen, while the press is written down in
+        // numbers at the end of the details block.
+        if (!string.IsNullOrWhiteSpace(pressPerson))
+          pressFlow = new WorkflowManager();
+        window = new ShellWindow(new MediaBrowserView(browser, pressFlow));
       }
       else if (screenName.Equals("people", StringComparison.Ordinal)
           || screenName.Equals("peoplemenu", StringComparison.Ordinal)
@@ -1508,6 +1527,22 @@ namespace FrontendProbe
         return 1;
       }
 
+      // The row a viewer would have stood on, stood here - THROUGH THE LIST, and after the window was shown, because
+      // the screen puts its remembered caret back when it attaches and a selection written before that is undone by
+      // the attach.  What the panel says about a title - its lettering, its cover, its reading - belongs to the stood
+      // row, and the shelf's first row is whatever the library happens to open with, which is not always a title
+      // wearing everything the panel can paint.  On the wall of names the same option is honoured among its own rows.
+      if (standAt.HasValue)
+      {
+        ListBox? stood_rows = window.GetVisualDescendants().OfType<ListBox>()
+            .FirstOrDefault(list_box => list_box.Name == "titlesList");
+        if (stood_rows != null && standAt.Value < stood_rows.Items.Count)
+        {
+          stood_rows.SelectedIndex = standAt.Value;
+          Pump(TimeSpan.FromMilliseconds(900));
+        }
+      }
+
       if (pictureFrames != null)
       {
         // The surface pulls the newest picture on a timer, so the picture only reaches the bitmap while the
@@ -1788,6 +1823,109 @@ namespace FrontendProbe
         }
 
         MeasureThePanel(detailsScreen, window!);
+      }
+
+      // The walk from a title onto a person's own wall, proved the way a remote proves it: the card is focused,
+      // Enter is keyed into it, and a wall has to answer standing on that name.  It is looked for on the live
+      // library frame, because a scripted title carries no cast - only a title read out of a running server has
+      // actor, artist and album-artist cards to press.  The frame itself stays the shelf: the wall is pushed onto a
+      // workflow of the probe's own, so the numbers say everything while the picture remains the one always taken.
+      if (!string.IsNullOrWhiteSpace(pressPerson) && pressFlow != null
+          && (window as ShellWindow)?.Screen is MediaBrowserView walkScreen)
+      {
+        MediaBrowserViewModel shelf = (MediaBrowserViewModel) walkScreen.DataContext!;
+        PumpUntil(delegate { return shelf.DetailsVisible; }, TimeSpan.FromSeconds(20));
+
+        // The cards only stand on the reading of the title, which the wall gives up when the shelf is walked - so
+        // the probe asks for it the way the viewer's dialog does, by giving the answer "Media information".
+        MediaTitleAction? reading = shelf.TitleActions
+            .FirstOrDefault(a => a.Kind == MediaTitleActionKind.Information);
+        if (reading != null)
+          shelf.RunTitleActionCommand.Execute(reading);
+        if (!PumpUntil(delegate { return shelf.InfoShown; }, TimeSpan.FromSeconds(20)))
+        {
+          Console.WriteLine("FAILED:   the reading of the title would not stand up, so no card of it can be pressed.");
+          return 1;
+        }
+
+        Console.WriteLine("panel:    " + (shelf.InfoShown
+            ? "the reading of \"" + shelf.DetailsHeading + "\" stands, holding " + shelf.DetailsActors.Count
+              + " actor(s), " + shelf.DetailsArtists.Count + " artist(s), "
+              + shelf.DetailsAlbumArtists.Count + " album-artist(s)"
+            : "the reading of the title would not stand up"));
+
+        List<Border> cards = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(walkScreen)
+            .OfType<Border>().Where(f => f.Classes.Contains("person-card") && f.DataContext is PersonCard)
+            .ToList();
+        Console.WriteLine("cards:    " + cards.Count + " person card(s) stand in the info panel"
+            + (cards.Count > 0
+                ? ": " + string.Join(", ", cards.Select(f => ((PersonCard) f.DataContext!).Name).Take(12))
+                : ""));
+        if (cards.Count == 0)
+        {
+          Console.WriteLine("FAILED:   this title's info panel holds no actor, artist or album-artist card at all.");
+          return 1;
+        }
+
+        Border pressed = pressPerson!.Equals("first", StringComparison.OrdinalIgnoreCase)
+            ? cards[0]
+            : cards.FirstOrDefault(f => ((PersonCard) f.DataContext!).Name
+                .Equals(pressPerson, StringComparison.OrdinalIgnoreCase))!;
+        if (pressed == null)
+        {
+          Console.WriteLine("FAILED:   no card of the info panel is named \"" + pressPerson + "\".");
+          return 1;
+        }
+
+        pressed.Focus();
+        Pump(TimeSpan.FromMilliseconds(100));
+        pressed.RaiseEvent(new KeyEventArgs
+        {
+          RoutedEvent = InputElement.KeyDownEvent,
+          Key = Key.Enter,
+          Source = pressed
+        });
+        Pump(TimeSpan.FromMilliseconds(200));
+
+        if (pressFlow.Current == null)
+        {
+          Console.WriteLine("FAILED:   the Enter keyed into that card pushed nothing onto the workflow.");
+          return 1;
+        }
+
+        PeopleViewModel wall = pressFlow.Current.ViewModel as PeopleViewModel;
+        if (wall == null)
+        {
+          Console.WriteLine("FAILED:   the card opened no wall of names - the frame is \""
+              + pressFlow.Current.StateId + "\".");
+          return 1;
+        }
+
+        // A wall is read by the screen that shows it (PeopleView.ReadWallAsync), and this frame never shows the
+        // wall it walked onto - so the errand is asked here, in the same call the screen makes.
+        _ = wall.ReadAsync(true);
+        Pump(TimeSpan.FromMilliseconds(50));
+        if (!PumpUntil(delegate { return !wall.Busy; }, TimeSpan.FromSeconds(90)))
+        {
+          Console.WriteLine("FAILED:   the wall the card opened was still reading after a minute and a half.");
+          return 1;
+        }
+
+        Pump(TimeSpan.FromMilliseconds(600));
+        PersonCard stood = (PersonCard) pressed.DataContext!;
+        Console.WriteLine("walk:     card \"" + stood.Name + "\" pushed frame \"" + pressFlow.Current.StateId
+            + "\" (\"" + wall.WallLabel + "\") asking the server for aspect " + wall.AspectName
+            + " in the part " + string.Join(",", wall.Roles));
+        Console.WriteLine("walk:     the wall holds " + wall.Rows.Count + " of " + wall.Total
+            + " name(s); caret stands on \"" + (wall.Selected == null ? "nobody" : wall.Selected.Name)
+            + "\"" + (wall.Selected != null && wall.Selected.Id == stood.Id
+                ? " - the very name that was pressed" : "")
+            + ", search field reads \"" + wall.SearchText + "\"");
+        if (wall.Selected == null || wall.Selected.Id != stood.Id)
+        {
+          Console.WriteLine("FAILED:   the wall came up, but not standing on the name that was pressed.");
+          return 1;
+        }
       }
 
       if (screenName.Equals("peoplesearch", StringComparison.Ordinal)
@@ -3099,11 +3237,20 @@ namespace FrontendProbe
       // tree says which of the two the layout actually agreed to.
       try
       {
+        // What the screen itself measures at, which is the number every fitter in it is fed: a column measured
+        // against a height the window never had cuts its lines at the wrong line.
+        Control? screen_view = window.GetVisualDescendants().OfType<Control>()
+            .FirstOrDefault(c => c is MediaBrowserView || c is PeopleView);
+        if (screen_view != null)
+          Console.WriteLine("view:     " + screen_view.GetType().Name + " at w "
+              + Math.Round(screen_view.Bounds.Width) + ", h " + Math.Round(screen_view.Bounds.Height));
+
         foreach (Control panel in window.GetVisualDescendants().OfType<Control>())
         {
           if (panel.Name != "detailsPanel" && panel.Name != "peopleList" && panel.Name != "room"
               && panel.Name != "detailsWords" && panel.Name != "detailsFace" && panel.Name != "titlesList"
               && panel.Name != "detailsName" && panel.Name != "detailsFacts" && panel.Name != "detailsLettering"
+              && panel.Name != "detailsLetteringBesideCover" && panel.Name != "detailsLetteringOverStory"
               && panel.Name != "biographyWords" && panel.Name != "biographyScroller"
               && panel.Name != "coverOnDisc" && panel.Name != "coverAlone")
             continue;
@@ -3112,6 +3259,8 @@ namespace FrontendProbe
           PeopleViewModel? spoken = panel.DataContext as PeopleViewModel;
           Console.WriteLine("mass:     " + panel.Name + " at x " + Math.Round(here.X) + " y " + Math.Round(here.Y)
               + ", w " + Math.Round(panel.Bounds.Width) + ", h " + Math.Round(panel.Bounds.Height)
+              + ", written Height " + (double.IsNaN(panel.Height) ? "none" : Math.Round(panel.Height))
+              + ", MaxHeight " + (double.IsInfinity(panel.MaxHeight) ? "none" : Math.Round(panel.MaxHeight))
               + ", visible " + panel.IsVisible + " (on screen " + panel.IsEffectivelyVisible + ")"
               + (panel is Border ring
                   ? ", ring " + (ring.BorderBrush == null ? "none" : ring.BorderBrush.GetType().Name) + " "

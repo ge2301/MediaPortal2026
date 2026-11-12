@@ -2317,22 +2317,26 @@
                 -->
                 <!--
                   THE WRITING, when a disc lies under the cover.  It keeps the place it was asked for in - the left
-                  hand end of the row, its top edge on the cover's top edge, a hundred twenty lines tall and never
-                  wider than two hundred fifty (MediaItemListAudioAlbumDetails.inc:26-31) - it only loses the
-                  company of the story, which has moved under the cover.  The hundred fifty of right margin are what
-                  keeps it out of the disc: the disc stands a hundred forty four lines into this column, and the
-                  margin holds the writing clear of it on a window of any width.
+                  hand end of the row, its top edge on the cover's top edge - and the measure the viewer asked for on
+                  2026-11-12: three tenths over the reference's, a hundred fifty six lines tall and never wider than
+                  three hundred twenty five (the reference's own measure is a hundred twenty by two hundred fifty,
+                  MediaItemListAudioAlbumDetails.inc:26-31).  It only loses the company of the story, which has moved
+                  under the cover.  The hundred fifty of right margin are what keeps it out of the disc: the disc
+                  stands a hundred forty four lines into this column, and the margin holds the writing clear of it on
+                  a window of any width - and holds it there at the new measure too, since a writing that meets the
+                  margin is drawn narrower rather than over the disc.
 
                   It stands here rather than being the same frame with a different row, because the row the story
                   is told in moves and this picture's row does not.
                 -->
-                <Image Grid.Row="3"
+                <Image Name="detailsLetteringBesideCover"
+                       Grid.Row="3"
                        Grid.Column="0"
                        Source="{Binding DetailsAlbumLettering,
                                         Converter={x:Static views:ArtworkConverter.Instance},
-                                        ConverterParameter=small}"
-                       Height="120"
-                       MaxWidth="250"
+                                        ConverterParameter=tile}"
+                       Height="156"
+                       MaxWidth="325"
                        Margin="0,40,150,0"
                        Stretch="Uniform"
                        HorizontalAlignment="Left"
@@ -2374,22 +2378,27 @@
                     THE ALBUM'S OWN LETTERING, over its story and nowhere else: the reference stood it at the left
                     hand end of the album's column, a hundred and twenty lines tall and asked of the server no
                     wider than two hundred and fifty, and put the album's description a row under it
-                    (MediaItemListAudioAlbumDetails.inc:26-31, the description at :307).  The measure here is that
-                    measure; the one thing it is not is the reference's five line top margin, because the viewer
-                    asked for the lettering's top edge to be the poster's top edge - and it is, since this column
-                    and the poster's frame both begin forty lines under the facts.
+                    (MediaItemListAudioAlbumDetails.inc:26-31, the description at :307).  The viewer asked on
+                    2026-11-12 for three tenths more of it, which is what it wears - a hundred fifty six lines tall
+                    and never wider than three hundred twenty five - and it is therefore asked and decoded at the
+                    tile's four hundred thirty two lines rather than at the small two hundred and fifty six, since a
+                    copy blown past the width it was read at is a blur by arithmetic.  The one thing it is not is the
+                    reference's five line top margin, because the viewer asked for the lettering's top edge to be the
+                    poster's top edge - and it is, since this column and the poster's frame both begin forty lines
+                    under the facts.
 
                     It is an album's picture and not a film's: a film's lettering stands in the head's progress
                     row beside the ring (MediaInfoMovieDetails.inc:355-362, DetailsClearArt above), and drawing the
                     same name twice on one screen is not showing it better.  An album that has neither kind says
                     nothing, which the frame below already promises by disappearing with the bytes.
                   -->
-                  <Image DockPanel.Dock="Top"
+                  <Image Name="detailsLetteringOverStory"
+                         DockPanel.Dock="Top"
                          Source="{Binding DetailsAlbumLettering,
                                           Converter={x:Static views:ArtworkConverter.Instance},
-                                          ConverterParameter=small}"
-                         Height="120"
-                         MaxWidth="250"
+                                          ConverterParameter=tile}"
+                         Height="156"
+                         MaxWidth="325"
                          Margin="0,0,0,7"
                          Stretch="Uniform"
                          HorizontalAlignment="Left"

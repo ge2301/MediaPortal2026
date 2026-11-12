@@ -41,6 +41,7 @@ using MediaPortal.Frontend.Settings;
 using MediaPortal.Frontend.Theming;
 using MediaPortal.Frontend.ViewModels;
 using MediaPortal.Frontend.Views;
+using MediaPortal.Frontend.Workflow;
 
 namespace Tests.Frontend
 {
@@ -192,6 +193,35 @@ namespace Tests.Frontend
       Assert.That(records.Asked[0], Does.Contain("aspect=AlbumItem"));
       Assert.That(records.Asked[0], Does.Contain("roles=albumartist"),
           "a record's artist is the one who made the record, not the one who sang one song of it");
+    }
+
+    /// <summary>
+    /// The singers of the tunes are a wall of their own, asked of the tunes' own shelf.  Measured on the running
+    /// library: the records answer thirty six album artists and the tunes three hundred and seventy six singers, and
+    /// twelve of the twenty eight people standing in eight songs' <c>artist</c> tags are not among those thirty six -
+    /// so a tune's artist card that opened the records' wall would open a wall its own name is not on.
+    /// </summary>
+    [Test]
+    public async Task TheWallOfTheTunesIsAskedOfTheTunesAndNotOfTheRecords()
+    {
+      WallServer tunes = new WallServer(9);
+      PeopleViewModel singers = AWall(PeopleShelf.SongArtists, tunes);
+
+      await singers.ReadAsync(true);
+
+      Assert.That(tunes.Asked[0], Does.Contain("aspect=AudioItem"),
+          "the singers of the tunes are asked of the tunes, which is the shelf the server names for them");
+      Assert.That(tunes.Asked[0], Does.Contain("roles=artist"),
+          "under the part the tune was tagged with, not the one its record bore");
+      Assert.That(singers.AspectName, Is.EqualTo("AudioItem"));
+      Assert.That(singers.Roles, Is.EqualTo(new[] { "artist" }));
+      Assert.That(singers.WallLabel, Is.EqualTo("Song artists"));
+
+      // Both record walls are the "artists" class of the memory's key - what keeps one wall's remembered answer from
+      // being read back as the other's is the shelf in front of the key, AlbumItem#artists against AudioItem#artists.
+      Assert.That(singers.FilterClass, Is.EqualTo("artists"));
+      Assert.That(AWall(PeopleShelf.Artists, new WallServer(9)).FilterClass, Is.EqualTo("artists"));
+      Assert.That(AWall(PeopleShelf.Artists, new WallServer(9)).AspectName, Is.EqualTo("AlbumItem"));
     }
 
     [Test]
@@ -453,6 +483,69 @@ namespace Tests.Frontend
       Assert.That(wall.Rows.Count, Is.EqualTo(9));
     }
 
+    /// <summary>
+    /// A card pressed somewhere else in the front end hands this wall a person and asks it to stand its caret there.
+    /// The name goes to the server rather than being looked for in the names that happen to have arrived, because the
+    /// wall of a film's actors holds 7543 names and has read thirty of them when the press comes in - and the field
+    /// wears the name the wall was cut to, because a wall of one name under an empty field reads as a library that
+    /// holds one name.
+    /// </summary>
+    [Test]
+    public async Task AWallArmedWithAPersonStandsItsCaretOnThemAndSaysSoInTheField()
+    {
+      WallServer library = new WallServer(60);
+      PeopleViewModel whole = AWall(PeopleShelf.FilmActors, library);
+      await whole.ReadAsync(true);
+      PersonTile pressed = whole.Rows.OfType<PersonTile>().Skip(40).First();
+
+      WallServer walked_of = new WallServer(60);
+      PeopleViewModel walked = AWall(PeopleShelf.FilmActors, walked_of);
+      walked.WalkTo(pressed.Id, pressed.Name);
+      await walked.ReadAsync(true);
+
+      Assert.That(walked_of.LastWall, Does.Contain("search=" + Uri.EscapeDataString(pressed.Name)),
+          "the wall was cut by the server, which is the one that knows where the four thousandth name stands");
+      Assert.That(walked.Selected, Is.Not.Null, "the caret stands on a name");
+      Assert.That(walked.Selected!.Id, Is.EqualTo(pressed.Id), "the very person whose card was pressed");
+      Assert.That(walked.HasSearch, Is.True, "the wall is looked through, so its mark stands ready");
+      Assert.That(walked.SearchText, Is.EqualTo(pressed.Name),
+          "and the field wears the name, so the cut explains itself to whoever looks at the screen");
+    }
+
+    /// <summary>
+    /// The promise of a walk is discharged once: the wall the viewer then opens out again with their own hand keeps
+    /// the name they are standing on but stops cutting itself to it, or every question after the press would be
+    /// answered under a word nobody typed.
+    /// </summary>
+    [Test]
+    public async Task AWalkIsSpentOnceAndANameTheWallCannotAnswerByIdIsStillStoodOnByName()
+    {
+      WallServer library = new WallServer(60);
+      PeopleViewModel whole = AWall(PeopleShelf.FilmActors, library);
+      await whole.ReadAsync(true);
+      PersonTile pressed = whole.Rows.OfType<PersonTile>().Skip(11).First();
+
+      WallServer asked = new WallServer(60);
+      PeopleViewModel walked = AWall(PeopleShelf.FilmActors, asked);
+
+      // A card is one library's word for a person; a wall read from a different answer - a re-import, a second
+      // household - can hold the name under another id.  Standing on the name then is the honest half of the walk.
+      walked.WalkTo(Guid.NewGuid(), pressed.Name);
+      await walked.ReadAsync(true);
+      Assert.That(walked.Selected, Is.Not.Null);
+      Assert.That(walked.Selected!.Name, Is.EqualTo(pressed.Name),
+          "the name the card carried is stood on even when its number is not the one this wall answers");
+
+      await walked.ClearSearchAsync();
+      Assert.That(asked.LastWall, Does.Not.Contain("search="),
+          "the whole wall was asked for, which is the viewer's own question");
+      Assert.That(walked.Rows.OfType<PersonTile>().Count(), Is.EqualTo(60));
+
+      await walked.ReadAsync(true);
+      Assert.That(asked.LastWall, Does.Not.Contain("search="),
+          "and the walk does not come back on the next read to cut the wall to a word nobody typed");
+    }
+
     [Test]
     public async Task TheOrderAndTheEndAreAskedForAndRemembered()
     {
@@ -563,6 +656,74 @@ namespace Tests.Frontend
       Assert.That(server.TitlesAsks, Is.GreaterThan(asked_before), "the group of its own titles was asked for");
       Assert.That(server.LastTitles, Does.Contain("who=" + person.ToString("D")),
           "and the group stands under the same person");
+    }
+
+    /// <summary>
+    /// A name in the wall is answered by a pointer as much as by the Enter key.  A wall of names reads like a list
+    /// of links, and a viewer who points at one and is shown nothing has every reason to believe the wall is broken
+    /// - which is exactly the report this law came from (2026-11-12: pressing an artist in the artists' wall opened
+    /// no shelf at all, because only the key was ever listened for).  The press has to land on the name the pointer
+    /// touched, not on whatever the caret happened to stand on, and it has to move the caret there first: the shelf
+    /// that opens is the shelf the viewer would have got by keying Enter on that same name.
+    /// </summary>
+    [AvaloniaTest]
+    public void ANamePressedWithThePointerOpensTheirOwnWorks()
+    {
+      WallServer server = new WallServer(60);
+      PeopleViewModel wall = AWall(PeopleShelf.Artists, server);
+      PersonTile? pressed = null;
+      TaskCompletionSource<PersonTile> opened = new TaskCompletionSource<PersonTile>();
+      PeopleView view = new PeopleView(wall, new WorkflowManager(), delegate (PersonTile tile)
+      {
+        pressed = tile;
+        opened.TrySetResult(tile);
+        return Task.FromResult<WorkflowFrame?>(null);
+      });
+
+      ShellWindow window = new ShellWindow(view);
+      window.Show();
+      WaitUntil("the wall to fill", delegate { return wall.Rows.Count > 30; });
+
+      ListBox names = window.GetVisualDescendants().OfType<ListBox>().First(list => list.Name == "peopleList");
+      WaitUntil("the names to be laid out", delegate { return names.GetVisualChildren().Count() > 0; });
+
+      // A pointer never presses a whole name: it presses the deepest thing under it, here a piece of the tile's own
+      // writing.  The click is driven through the headless window rather than by raising the event by hand, so that
+      // the hit testing, the press, the release and the tap all happen the way a hand makes them.
+      TextBlock? touched = null;
+      for (int walking = 0; walking < 60 && touched == null; walking++)
+      {
+        touched = names.GetVisualDescendants()
+            .OfType<TextBlock>()
+            .FirstOrDefault(word => word.DataContext is PersonTile && word.IsVisible && word.Bounds.Height > 4);
+        if (touched == null)
+          Pump();
+      }
+
+      Assert.That(touched, Is.Not.Null, "a name of the wall is laid out and can be pointed at");
+      PersonTile aimed = (PersonTile)touched!.DataContext!;
+      names.SelectedIndex = 0;
+
+      // A headless frame drives no mouse, so the tap is handed over the way the window hands one over - the same
+      // hand-made press the screen of the music wears (TestNowPlayingWindow).  What matters here is the source: the
+      // tap arrives from deep inside the tile, as a real one does, and not already dressed as a name.
+      PointerPressedEventArgs pressing = new PointerPressedEventArgs(touched!, null!, touched,
+          new Point(touched.Bounds.Width / 2, touched.Bounds.Height / 2), 1,
+          new PointerPointProperties(), KeyModifiers.None)
+      {
+        RoutedEvent = InputElement.PointerPressedEvent
+      };
+      touched.RaiseEvent(new TappedEventArgs(InputElement.TappedEvent, pressing) { Source = touched });
+
+      for (int waiting = 0; waiting < 60 && !opened.Task.IsCompleted; waiting++)
+        Pump();
+
+      Assert.That(opened.Task.IsCompleted, Is.True,
+          "a name pressed with the pointer opens a shelf, as the Enter key of the same name always did");
+      Assert.That(pressed, Is.SameAs(aimed),
+          "a pointer pressing a name opens that name's works - not the works of whoever the caret stood on");
+      Assert.That(names.SelectedItem, Is.SameAs(aimed),
+          "and the caret walks to the name that was pressed, so the wall is left where the hand left it");
     }
 
     /// <summary>
@@ -1389,8 +1550,11 @@ namespace Tests.Frontend
 
       ListBox names = window.GetVisualDescendants().OfType<ListBox>().First(list => list.Name == "peopleList");
       WaitUntil("the names to be laid across the wall", delegate { return TheWallColumns(names) > 1; });
-      TextBlock life_field = window.GetVisualDescendants().OfType<TextBlock>()
-          .First(field => field.Name == "biographyWords");
+      // The life's own lettering lives INSIDE its scroller, and a scroller that has nothing to say is never measured,
+      // so its content is never even built: what stands in the markup whatever the record tells is the scroller, and
+      // that is the thing this column asks.
+      ScrollViewer life_field = window.GetVisualDescendants().OfType<ScrollViewer>()
+          .First(field => field.Name == "biographyScroller");
 
       // The caret on the first name, which is where a wall that opens stands it by itself.
       (names.ContainerFromIndex(0) as Control)?.Focus();
@@ -1493,9 +1657,10 @@ namespace Tests.Frontend
 
     /// <summary>
     /// A name of the record shelf wears its own lettering where an album wears its own, and wears it DOUBLE the
-    /// album's size, which is what the viewer asked for and what this column can give: an album's writing had to fit
-    /// beside a cover inside two hundred and fifty lines (<c>MediaBrowserView.axaml</c>, the Image over
-    /// <c>DetailsAlbumLettering</c> at Height 120, MaxWidth 250), while the writing beside a face stands in the whole
+    /// measure the reference wrote for an album, which is what the viewer asked for and what this column can give: an
+    /// album's writing had to fit beside a cover (<c>MediaBrowserView.axaml</c>, the two Images over
+    /// <c>DetailsAlbumLettering</c>, which stood at Height 120 and MaxWidth 250 until the viewer raised them to 156
+    /// and 325 on 2026-11-12), while the writing beside a face stands in the whole
     /// left hand column of five hundred and thirteen and the face it stands beside is three hundred eighty lines
     /// square.  Asked and decoded at the width it is drawn at rather than at an album's two hundred and fifty six,
     /// because a copy blown up twice across the screen is a blur by arithmetic.
@@ -1512,7 +1677,7 @@ namespace Tests.Frontend
       Image lettering = window.GetVisualDescendants().OfType<Image>().First(writing => writing.Name == "detailsLettering");
       Border face = window.GetVisualDescendants().OfType<Border>().First(frame => frame.Name == "detailsFace");
 
-      Assert.That(lettering.Height, Is.EqualTo(240), "twice the album's hundred and twenty lines of height");
+      Assert.That(lettering.Height, Is.EqualTo(240), "twice the reference's album measure of a hundred and twenty lines");
       Assert.That(lettering.MaxWidth, Is.EqualTo(500), "and twice its two hundred and fifty across");
       Assert.That(Grid.GetRow(lettering), Is.EqualTo(Grid.GetRow(face)),
           "it stands in the picture's own row, as the album's writing stands in its cover's row");
@@ -1580,8 +1745,13 @@ namespace Tests.Frontend
 
       // The reading is told UNDER its picture, over the whole breadth of the column, which is what a record does:
       // an album's story is given the panel's whole width under the cover rather than the strip left of it.
-      Assert.That(life.Bounds.X, Is.EqualTo(column.Bounds.X).Within(1.0), "the life begins at the column's left edge");
-      Assert.That(life.Bounds.Y, Is.GreaterThanOrEqualTo(face.Bounds.Bottom),
+      // The life stands inside its scroller, so its own bounds are reckoned from the scroller's corner rather than
+      // from the column's; both it and the face are therefore brought into the column's reckoning before they are
+      // compared, which is what the render probe does with the same two controls.
+      Point life_at = life.TranslatePoint(new Point(0, 0), column) ?? new Point(-1, -1);
+      Point face_at = face.TranslatePoint(new Point(0, 0), column) ?? new Point(-1, -1);
+      Assert.That(life_at.X, Is.EqualTo(0).Within(1.0), "the life begins at the column's left edge");
+      Assert.That(life_at.Y, Is.GreaterThanOrEqualTo(face_at.Y + face.Bounds.Height),
           "and it is told under the picture, as a record's story is, and never squeezed into the strip beside it");
       Assert.That(life.Bounds.Width, Is.EqualTo(column.Bounds.Width).Within(1.0),
           "over the whole breadth of the column of words");

@@ -6572,19 +6572,133 @@ entirely, and a date the library gave as the first of January is said as the yea
 (or its Logo, which is what this household's import filed - measured: 3 ClearArts against 39 Logos over 43 albums, and
 for „Adele" the Logo door answering while ClearArt answers 404) stands that writing at the left hand end of the
 picture's row, exactly where an album wears its own. It wears it DOUBLE the album's measure - 240 high and 500 across
-rather than 120 and 250 - because an album's writing had to share a hundred forty pixel cover while this column gives
+rather than 120 and 250 (the album's own writing was raised to 156 by 325 on 2026-11-12, see the paragraph below) -
+because an album's writing had to share a hundred forty pixel cover while this column gives
 the writing five hundred and thirteen lines of its own beside a face of three hundred eighty; and it is asked and decoded
 at 640 (`PictureWidths.COVER`) rather than at the album's 256, since a copy blown up twice is a blur by arithmetic.
 Measured at 1920x1080 against the living server, `detailsLettering` stands `427x240` at `x 957 y 201` with the face at
 `x 1490 y 201 380x380` - the same row, the writing's top edge on the face's top edge.
 
 Measured with the render probe at 1920x1080 against the living server, the wall's column and the shelf's are the same
-box and the same head: `detailsWords` at `x 957 y 44, w 913, h 1089`, `detailsName` `h 55`, `detailsFacts` `y 103 h 58`,
+box and the same head: `detailsWords` at `x 957 y 44, w 913, h 936`, `detailsName` `h 55`, `detailsFacts` `y 103 h 58`,
 the face's right edge landing on the column's right edge (1490 + 380 = 1870, the words' own right edge). A name the
 library keeps no picture of stands the plate at the same square, so the column's shape is the person's portrait and not
 the record's luck. Tests hold the arrangement, the single table definition in the source of both screens, and the
 lettering's double measure and its place at the picture's head.
 
-`Tests.Frontend/TestTheWallOfPeople.cs` **35 tests** - the count standing after the life's cut was re-told to the plot's
-plate and the lettering's double measure was added; the green count of the next run belongs to that run.
+**The record shelf's own lettering wears thirty per cent more, at the viewer's word of 2026-11-12.** An album's
+writing beside its cover had stood the reference's measure - 120 high, never wider than 250
+(`MediaItemListAudioAlbumDetails.inc:26-31`) - since it was first laid out; it now stands 156 high and never wider
+than 325, in BOTH of its shapes: over the reading while the reading stands beside the cover
+(`detailsLetteringOverStory`), and at the left hand end of the picture's row once a disc has pushed the reading under
+the cover (`detailsLetteringBesideCover`).  Both are named now, because a writing that paints itself and cannot be
+asked for its bounds is a writing nobody can measure.  A copy blown past the width it was read at is a blur by
+arithmetic, so the writing is asked of the server and decoded at the tile's 432 instead of the small 256:
+`PanelArtworkFor` takes its width from the caller now, and only the record's two kinds of writing (`ClearArt`, and
+the `Logo` most importers file it under) ask bigger - a film's lettering still stands 140 by 240 in the head's row
+and a disc still peeks out of a small read, both unchanged.  Measured at 1920x1080 against the living server, an
+album whose library keeps a disc answers `detailsLetteringBesideCover 325x126 ... on screen True` and an album
+without one answers `detailsLetteringOverStory 325x126 ... on screen True`; 325 is the 250 with its thirtieth per
+cent on it, and the height follows the picture's own proportions.  On a window of 720 lines the same writing draws
+181 wide, because the column it is docked in is 181 wide there - the cover's column of 400 takes what the writing
+would have grown into, and on that window it is the column that binds it, not the cap.  The probe honours
+`--stand <row>` on a shelf as well as on a wall (through the list, after the screen has put its remembered caret
+back, which is why a caret written before the window was shown was undone), and that is what let a title wearing a
+lettering be measured at all - the shelf's first row is whatever the library happens to open with, and this
+household's first album keeps no lettering.
+
+**The life ends where a film's plot ends, and the picture gives way to keep that promise.** The column wrote the
+height of its words box but never read it back: the guard meant to hand the box its height compared the height it had
+been given with the room, and a height the box had never been given is not a number — `Math.Abs(NaN - x) > 0.5` is
+never true — so the write never happened.  The box then grew into everything its row left it (736 lines on a window of
+720, its foot 160 lines past the viewer's line), the life began below that foot, and the viewer saw the biography
+running off the bottom of the screen while the shelf cut its plot at the same line for fifteen years.  `FitWordsIntoThePanel`
+now tests both halves of the shelf's condition — the height that differs and the height that is none — and
+`FitLifeIntoTheColumn` applies the shelf's two remaining measures: the life is cut to what the box has left below its
+own beginning (`biographyScroller.MaxHeight`, `biographyWords.MaxLines` counted out of that height, floored at
+`ShelfDetailsColumn.WORDS_FLOOR`, one story's worth), and the picture is measured DOWN before the lines yield, which is
+what the shelf does with a cover it never insists on drawing at the size its markup offers (a cover of 200 written is
+measured to 146x218 on a window of 720).  `FACE_DRAWN` 380, `FACE_MIN` 160, `FACE_LETTERING` 240 kept in proportion to
+the face, and nothing is measured down at all where no life is told — an actor without a biography keeps the full
+square.  Measured against the living server, and this is the whole point: on 1920x1080 the box is `44/936` with its foot
+at `980` and the life `621/359` with its foot at `980`; on 1280x720 the box is `44/576` with its foot at `620` — the
+identical numbers the shelf's own plot measures on the same window — while the life reads `460/160` and the face has
+given way to `219x219` with its lettering at `102`.  The probe prints the *written* Height and MaxHeight with every
+mass line for exactly this reason: the arranged bounds alone could not tell a fitted column from one that had silently
+never been fitted, and that is the bug this section exists to keep out.
+
+**The people of a reading are doors into their walls.** A name standing in the Actors band of a title's reading, or in
+a record's Artists or Album artists band, is a card the viewer can press: its Enter — and its click, the pointer's own
+way of pressing — opens the wall of that part with the caret standing on that person, pushed onto the workflow so the
+way back leads to the reading the card was pressed in.  Directors and composers stay plain faces with a name under them:
+this front end has no wall of directors and none of composers, and a card that looks like the others but opens nothing
+is the kind of dead tile this screen has been cleared of elsewhere.  The walk is promised by the person's **id** and not
+by their spelling — measured against the living server before it was written down, the tunes' wall answers „David
+Guetta" twice out of its 376 names, so a card handing over a name would stand the caret on whichever of the two the wall
+happened to list first, while card and wall read the same MediaItemId.
+
+**Which wall a name opens turns on the part the person played, not on the shelf the viewer happened to be walking.**
+`albumartist` opens the records' wall (`aspect=AlbumItem&roles=albumartist` — 36 names in this household), `artist`
+opens a wall that is new with this change, the tunes' singers (`aspect=AudioItem&roles=artist` — 376 names, 374 behind
+the two placeholders nobody is), and `actor` opens the actors of the shelf being read (7543 for the films, 110 for the
+series).  The tunes needed their own wall rather than reusing the records': of the 28 people standing in eight songs'
+`artist` tags, **12 are not among the 36 album artists**, so a tune's artist card opening the records' wall would open a
+wall whose names do not contain the name that was just pressed.  Both record walls are the `artists` class of the
+memory's key and stay apart by the shelf standing in front of it (`AlbumItem#artists` against `AudioItem#artists`),
+which is why the rail's „By artist" filter still leads to the records and not to the tunes.
+
+**The wall arrives cut to the name, and says so in its field.**  A wall of 7543 names is read thirty at a time, and the
+only party that knows where the four thousandth name stands is the server, so the walk hands the NAME to the server and
+the caret to the answer: the wall opens searched with the name standing in its field — a wall of one name under an empty
+field reads as a library that holds one name — the caret on the row whose id matches, and the mark at the field's hand
+giving the whole wall back.  A wall that cannot answer the id still stands on the name it was given, and the promise of
+a walk is spent once: the viewer's own question after the press is answered under their own words.
+
+**A wall of names answers a hand as well as a remote, and a press is never unanswered in silence.** Two defects came out
+of the viewer's word of 2026-11-12 („wenn ich im audio artist screen einen artisten anklicke werden nicht die
+entsprechenden Alben gezeigt").  The wall listened for the Enter key and for nothing else, so a name pointed at was
+selected and opened nothing — the info screen's cards had answered a click since they became doors
+(`MediaBrowserView.HooksPersonCards`) and the wall never caught up.  And the application's answer to a press looked for
+the shelf only among the sections the home screen had already built, and walked away without a word when those were not
+there yet, which is what a press in the first seconds after start-up meets: the tiles are built at the end of the first
+home refresh.  `peopleList` now hooks the bubbling `Tapped` — the tile is whatever the template grew, so the handler
+walks up from the thing the pointer hit to the first control carrying a `PersonTile`, and a plate standing between two
+letters is walked past — and it moves the caret onto the name that was pressed before opening it, so that the column
+beside the wall, the shelf that opens and the wall the viewer walks back to all say one name.  `PersonWorksAsync` asks
+`_home.Sections`, then `_home.Aspects`, then the server itself (`GetLibraryAspectsAsync`) for the kind of shelf a name is
+to stand under, and says what it decided:
+
+```
+works:    Selena Gomez - Albums cut to who=691bbeac-84a4-4560-adb8-5f64c593ee81 roles=albumartist
+```
+
+because a press that opens nothing has to be tellable apart from a press that never arrived, and a refusal is printed
+too.  Measured against the living server, and this is the other half of the answer: the records' wall holds „Selena
+Gomez" as id `691bbeac`, and that id answers one album; the tunes' wall holds a *different* person named „Selena Gomez &
+The Scene" with fifteen songs and no albums.  This library keeps one person record per part played, so the two record
+walls are walls of different people, and a name opens the works of the part it was pressed in — which is why the
+album-artist who looked broken was never broken, only unreachable by a pointer.
+
+**Proved by a remote and a living library, not by a method call.** The render probe grew `--press-person <name|first>`,
+which stands the reading of a live title up, focuses the card of that name and keys its Enter into it, then says what
+arrived:
+
+```
+--screen browser --server http://localhost:55555/MediaPortal/Server --aspect MovieItem --press-person first
+cards:    11 person card(s) stand in the info panel: Ken Watanabe, John David Washington, ...
+walk:     card "Ken Watanabe" pushed frame "people" ("Film actors") asking the server for
+          aspect MovieItem in the part actor
+walk:     the wall holds 1 of 1 name(s); caret stands on "Ken Watanabe" - the very name that was
+          pressed, search field reads "Ken Watanabe"
+```
+
+and the same for the two record shelves: `--aspect AlbumItem` answers card „The Gloaming" → `("Artists") asking the
+server for aspect AlbumItem in the part albumartist`, `1 of 1`; `--aspect AudioItem` answers card „David Guetta" →
+`("Song artists") asking the server for aspect AudioItem in the part artist`, `2 of 2 name(s)` with the caret standing
+on the one whose number was pressed — the two David Guettas, told apart by id.
+
+`Tests.Frontend/TestTheWallOfPeople.cs` **39 tests** — the count after the tunes' own wall and the two walks were added
+to the wall's law — and `TestMediaBrowser.cs` carries two more, one for the pressed card (its wall, its id handed over,
+the pushed frame, and the director who stays still) and one for the part that decides the wall.  The green count of the
+next run belongs to that run.
 

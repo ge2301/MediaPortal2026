@@ -141,6 +141,16 @@ namespace MediaPortal.Frontend.Views
       }
       _shelfFloor = titlesList.Margin;
 
+      // Three of the people bands lead somewhere: a card of the actors', the artists' or the album artists' row is
+      // that person, and pressing it walks to their wall with the caret standing on them (WalksTrackCards keys the
+      // same walk).  The ask is hooked on the bands rather than on the shared PersonCardTile template, because the
+      // wall of people wears that very template for its own tiles, and a tile of a wall of names has its own answer
+      // to a press.  The directors' and the composers' rows are not hooked at all - there is no wall of directors
+      // and no wall of composers to walk to (see MediaBrowserViewModel.OpenPersonWall).
+      HooksPersonCards(actorsScroller, "actor");
+      HooksPersonCards(artistsScroller, "artist");
+      HooksPersonCards(albumArtistsScroller, "albumartist");
+
       // The drawn cover row wants its posters from its first frame on - whether the viewer walked into the shape or
       // the screen opened in it.  Wiring this only when the shape is switched left every cover but the one the
       // invisible list happened to paint without a picture.
@@ -4177,8 +4187,10 @@ namespace MediaPortal.Frontend.Views
     ///
     /// That row is walked like every other band of this reading and answers one key more than the others do: a press
     /// on one of its posters READS the film it stands for, its posters being the collection's films and not a
-    /// picture of them (<see cref="ReadsCollectionFilm"/>).  Every other card of this reading still answers the key
-    /// with nothing, and no card of it anywhere ever starts a film.
+    /// picture of them (<see cref="ReadsCollectionFilm"/>).  The three bands of people whose cards have a wall to
+    /// walk to answer that same key by opening it (<see cref="OpensPersonWall"/>), and the bands of tracks, of
+    /// directors and of composers still answer every press with nothing - no card of this reading anywhere starts a
+    /// film.
     /// </summary>
     private bool WalksTrackCards(KeyEventArgs args)
     {
@@ -4264,15 +4276,30 @@ namespace MediaPortal.Frontend.Views
             return StandsOnTrackCard(BandBelow(band), at, args);
           }
         case Key.Enter:
-          if (band != collectionScroller)
-            break;
+          {
+            // A person's card IS that person, and Enter on it walks to their wall with the caret standing on them
+            // (MediaBrowserViewModel.OpenPersonWall).  The key is taken whatever comes of the walk, exactly as the
+            // collection's posters take it: Enter means "this one" everywhere else on this screen, and a card that
+            // answered its own press with nothing would hand the very key to the player behind it.  The directors'
+            // and composers' rows answer nothing, which is why their cards were never hooked at all.
+            string? role = RoleOfTheBand(band);
+            if (role != null)
+            {
+              args.Handled = true;
+              OpensPersonWall(cards[at], role);
+              break;
+            }
 
-          // Taken whether or not there was a film to read behind the card, because Enter means "play this"
-          // everywhere else on this screen and a poster that answered its own press with nothing would hand that
-          // very key to the player.
-          args.Handled = true;
-          ReadsCollectionFilm(cards[at]);
-          break;
+            if (band != collectionScroller)
+              break;
+
+            // Taken whether or not there was a film to read behind the card, because Enter means "play this"
+            // everywhere else on this screen and a poster that answered its own press with nothing would hand that
+            // very key to the player.
+            args.Handled = true;
+            ReadsCollectionFilm(cards[at]);
+            break;
+          }
         default:
           return false;
       }
@@ -4318,6 +4345,64 @@ namespace MediaPortal.Frontend.Views
         card.Focus();
         ReadsCollectionFilm(card);
       }
+    }
+
+    /// <summary>
+    /// Lets a pointer press the cards of one people band, which is the same ask that band's Enter makes
+    /// (<see cref="WalksTrackCards"/>).  Hooked as a routed tap on the band, because the card the viewer hits is
+    /// whatever the template grew - the walk up from it stops at the card that carries a person.
+    /// </summary>
+    /// <param name="band">The band whose cards are to answer a press.</param>
+    /// <param name="role">The part the people of this band played, which decides the wall they open.</param>
+    private void HooksPersonCards(ScrollViewer band, string role)
+    {
+      band.AddHandler(InputElement.TappedEvent, delegate (object? sender, TappedEventArgs args)
+      {
+        for (Visual? stood = args.Source as Visual; stood != null && stood != band; stood = stood.GetVisualParent())
+        {
+          if (stood is Control card && card.DataContext is PersonCard person)
+          {
+            card.Focus();
+            OpensPersonWall(person, role);
+            args.Handled = true;
+            return;
+          }
+        }
+      }, handledEventsToo: false);
+    }
+
+    /// <summary>
+    /// Walks from one card of a people band onto the wall of the person it stands for, and asks for nothing when the
+    /// card stands in a band that has no wall: a director and a composer stay as they were, because the alternative
+    /// is a card that opens a wall the person is not on.
+    /// </summary>
+    private void OpensPersonWall(Control card, string role)
+    {
+      if (DataContext is MediaBrowserViewModel viewModel && card.DataContext is PersonCard person)
+        OpensPersonWall(person, role);
+    }
+
+    /// <summary>Sends the person of one card to the wall that holds them, whose kind is told by the card's row.</summary>
+    private void OpensPersonWall(PersonCard person, string role)
+    {
+      if (DataContext is MediaBrowserViewModel viewModel)
+        viewModel.OpenPersonWall(person, role);
+    }
+
+    /// <summary>
+    /// The part the people of one band played, or <c>null</c> for a band whose cards lead nowhere.  This is the one
+    /// place that knows which row a card stood in when its Enter was keyed, and the row is what decides the wall -
+    /// the card itself carries only a name and an id.
+    /// </summary>
+    private string? RoleOfTheBand(ScrollViewer band)
+    {
+      if (ReferenceEquals(band, actorsScroller))
+        return "actor";
+      if (ReferenceEquals(band, artistsScroller))
+        return "artist";
+      if (ReferenceEquals(band, albumArtistsScroller))
+        return "albumartist";
+      return null;
     }
 
     /// <summary>

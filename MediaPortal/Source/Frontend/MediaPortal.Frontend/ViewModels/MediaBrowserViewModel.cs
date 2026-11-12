@@ -4481,6 +4481,46 @@ namespace MediaPortal.Frontend.ViewModels
     }
 
     /// <summary>
+    /// Walks from one card of the info screen's people rows onto that person's own wall, with the caret standing on
+    /// them.  Which of the four walls a card belongs to is told by the row it stands in rather than by the card: the
+    /// card carries a name and an id, while the row knows the part the library filed that person under.  The actors'
+    /// row opens the films' or the series' wall according to the shelf this title came from, an album's artist opens
+    /// the records' wall of thirty six names, and a tune's artist - who is frequently nobody's album artist, twelve
+    /// of the twenty eight people named by eight tunes of this library were - opens the tunes' wall of three hundred
+    /// seventy six, which is the wall that actually holds them.
+    /// </summary>
+    /// <param name="card">The card that was keyed or pointed at; the wall is stood on its id.</param>
+    /// <param name="role">The part the row stands for: <c>"actor"</c>, <c>"artist"</c> or <c>"albumartist"</c>.</param>
+    /// <remarks>
+    /// Directors and composers are asked for nothing, and their cards are not linked: this front end has no wall of
+    /// directors and no wall of composers, and a card that opened a wall the person is not standing on would teach
+    /// the viewer that the screens answer with luck.  What the id is used for rather than the name alone: two people
+    /// of one name are two people, and the card that was pressed knows which of them it was.
+    /// </remarks>
+    public void OpenPersonWall(PersonCard card, string role)
+    {
+      ServerApiClient? client = _client;
+      if (client == null || card == null)
+      {
+        Status = "There is no server to ask for the people of this shelf";
+        return;
+      }
+
+      PeopleShelf wall_kind;
+      if (string.Equals(role, "albumartist", StringComparison.OrdinalIgnoreCase))
+        wall_kind = PeopleShelf.Artists;
+      else if (string.Equals(role, "artist", StringComparison.OrdinalIgnoreCase))
+        wall_kind = PeopleShelf.SongArtists;
+      else
+        wall_kind = PeopleViewModel.ShelfForAspect(AspectName);
+
+      PeopleViewModel wall = new PeopleViewModel(client, wall_kind, _pictures);
+      wall.WalkTo(card.Id, card.Name);
+      HideMediaMenu();
+      PeopleWallRequested?.Invoke(this, wall);
+    }
+
+    /// <summary>
     /// Asks the server how many titles carry each value of one category and puts them on the menu - the same
     /// count the browse screen shows in its middle column, reached from the shelf it belongs to.
     /// </summary>
@@ -5362,7 +5402,10 @@ namespace MediaPortal.Frontend.ViewModels
 
       foreach (string kind in kinds)
       {
-        Artwork? artwork = PanelArtworkFor(kind);
+        // A record's writing is drawn up to three hundred twenty five lines across in the details column, so it is
+        // asked at the tile's width; a film's lettering stands a hundred forty lines high and no wider than two
+        // hundred forty in the head's row, and keeps the small read it has always had.
+        Artwork? artwork = PanelArtworkFor(kind, IsMusic ? PictureWidths.TILE : PictureWidths.SMALL);
         if (artwork == null)
           return;
 
@@ -5381,14 +5424,20 @@ namespace MediaPortal.Frontend.ViewModels
         if (picture == null)
           continue;
 
-        if (!ArtworkConverter.Instance.Remembers(picture, ArtworkConverter.POSTER_PARAMETER))
+        // What the panel is going to ask for, so that the binding finds the picture lying there.  A record's
+        // writing is drawn three tenths over the reference's measure - a hundred fifty six lines high, never wider
+        // than three hundred twenty five (the viewer's word on 2026-11-12) - so it is decoded at the tile's four
+        // hundred thirty two; at the small two hundred and fifty six it would be stretched by a quarter, which on a
+        // television is the blur nobody asked for.  A film's writing still stands two hundred forty lines wide and
+        // keeps the small decode, out of the one budget the shelf's covers are short of.
+        string wanted = IsMusic
+            ? ArtworkConverter.TILE_PARAMETER
+            : ArtworkConverter.POSTER_PARAMETER;
+        if (!ArtworkConverter.Instance.Remembers(picture, wanted))
         {
-          //  The lettering is drawn a hundred and forty points high and never wider than two hundred and forty,
-          //  so it is read at the small width: read at the wall width it stood on about five times the pixels it
-          //  can ever paint, out of the one budget the shelf's covers are short of.
           byte[] toRead = picture;
           await Task.Run(() =>
-              ArtworkConverter.Instance.Warm(toRead, ArtworkConverter.POSTER_PARAMETER));
+              ArtworkConverter.Instance.Warm(toRead, wanted));
         }
 
         // The last question asked is the one that may write, exactly as with the poster: a viewer walking two
@@ -5434,7 +5483,7 @@ namespace MediaPortal.Frontend.ViewModels
       if (!IsMusic)
         return;
 
-      Artwork? artwork = PanelArtworkFor("DiscArt");
+      Artwork? artwork = PanelArtworkFor("DiscArt", PictureWidths.SMALL);
       if (artwork == null)
         return;
 
@@ -6001,26 +6050,34 @@ namespace MediaPortal.Frontend.ViewModels
       }
     }
 
-    private readonly Dictionary<string, Artwork?> _panelArtworks = new Dictionary<string, Artwork?>();
+    private readonly Dictionary<(string Kind, int Width), Artwork?> _panelArtworks =
+        new Dictionary<(string Kind, int Width), Artwork?>();
 
     /// <summary>
-    /// The panel's own picture of one kind, made once per kind and kept. Separate from the tiles' pictures
-    /// (<see cref="TileArtworkFor"/>) because a panel asks for kinds no tile ever wears, and sharing one cache
-    /// between them would put a title's logo in a tile's bytes and a tile's banner in the logo's.
+    /// The panel's own picture of one kind, asked at a width the caller names, made once per kind and kept. Separate
+    /// from the tiles' pictures (<see cref="TileArtworkFor"/>) because a panel asks for kinds no tile ever wears, and
+    /// sharing one cache between them would put a title's logo in a tile's bytes and a tile's banner in the logo's.
     /// </summary>
-    private Artwork? PanelArtworkFor(string kind)
+    /// <remarks>
+    /// The width belongs to the caller because the kinds behind this door are drawn at two different sizes: an
+    /// album's lettering stands up to three hundred twenty five lines across in the details column and is asked at
+    /// the tile's four hundred thirty two so that a copy is never stretched, while the same kind on a film and a disc
+    /// peeking out at a cover's edge are drawn small and keep the small read.  The cache key carries the width
+    /// (<see cref="PictureWidths.Shelf"/>) for exactly that reason.
+    /// </remarks>
+    private Artwork? PanelArtworkFor(string kind, int width)
     {
-      if (_panelArtworks.TryGetValue(kind, out Artwork? known))
+      if (_panelArtworks.TryGetValue((kind, width), out Artwork? known))
         return known;
 
       Artwork? created = _client == null
           ? null
-          : PicturesOf(_client, PictureWidths.Shelf(kind, PictureWidths.SMALL), id =>
+          : PicturesOf(_client, PictureWidths.Shelf(kind, width), id =>
               {
                 (Guid asked, int? season) = AskOf(id);
-                return _client.GetFanArtAsync(asked, kind, season, PictureWidths.SMALL);
+                return _client.GetFanArtAsync(asked, kind, season, width);
               });
-      _panelArtworks.Add(kind, created);
+      _panelArtworks.Add((kind, width), created);
       return created;
     }
 

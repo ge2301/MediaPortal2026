@@ -194,6 +194,31 @@ namespace MediaPortal.Frontend.Views
 
       peopleList.AddHandler(ScrollViewer.ScrollChangedEvent, delegate { ScheduleFacePainting(); });
 
+      // A name pointed at is the same question its Enter asks (the Enter branch of this screen's key handling), which
+      // is what the info screen's people cards have answered ever since they became doors
+      // (MediaBrowserView.HooksPersonCards).  Hooked as a routed tap on the wall rather than on a tile, because the
+      // tile is whatever the template grew: the walk up from the thing the pointer hit stops at the first control
+      // carrying a person, and a plate standing between two letters carries none.  Without this the wall answered a
+      // remote and not a hand, and a viewer holding a mouse pressed a name and saw nothing at all
+      // (viewer's word 2026-11-12: „wenn ich einen Artisten anklicke").
+      peopleList.AddHandler(InputElement.TappedEvent, delegate (object? sender, TappedEventArgs args)
+      {
+        for (Visual? stood = args.Source as Visual; stood != null && stood != peopleList;
+             stood = stood.GetVisualParent())
+        {
+          if (stood is Control tile && tile.DataContext is PersonTile pressed)
+          {
+            // The caret goes where the pointer pointed, so that the column beside the wall and the shelf that opens
+            // say one name and a viewer walking back stands on the name they pressed.
+            peopleList.Focus();
+            peopleList.SelectedItem = pressed;
+            args.Handled = true;
+            _ = OpenWorksAsync(pressed);
+            return;
+          }
+        }
+      }, handledEventsToo: false);
+
       if (_wall != null)
       {
         _wall.PropertyChanged += OnWallChanged;
@@ -985,6 +1010,25 @@ namespace MediaPortal.Frontend.Views
     private static readonly TimeSpan ROW_GLIDE = TimeSpan.FromMilliseconds(300);
 
     /// <summary>
+    /// The square a face is drawn in when the column has room for it, which is the number the markup wears
+    /// (PeopleView.axaml, detailsFace).
+    /// </summary>
+    private const double FACE_DRAWN = 380;
+
+    /// <summary>
+    /// The least square a face is measured down to when the column is short.  It is the shelf's own floor for the
+    /// row a picture stands in (MediaBrowserViewModel.DetailsPictureRowFloor), which is also the floor of a row of
+    /// reading - a number this household already writes down rather than one invented for this screen.
+    /// </summary>
+    private const double FACE_MIN = 160;
+
+    /// <summary>
+    /// The height the name's own writing is asked for at full height: the double of the album's lettering, which is
+    /// what the viewer asked for on 2026-11-11.  It travels with the face beside it.
+    /// </summary>
+    private const double FACE_LETTERING = 240;
+
+    /// <summary>
     /// Divides the room between the wall and its column of words by the measure a shelf of titles divides its room
     /// by (<see cref="ShelfDetailsColumn"/>), so that the same window width hands a wall and a shelf the same
     /// number of points to the words and the two screens stand their tiles at the same x.  With the words away the
@@ -1033,26 +1077,81 @@ namespace MediaPortal.Frontend.Views
 
       Point stood = detailsWords.TranslatePoint(new Point(0, 0), this) ?? new Point(0, -1);
       double room = ShelfDetailsColumn.WordsHeightFor(height, stood.Y);
-      if (!double.IsNaN(room) && Math.Abs(detailsWords.Height - room) > 0.5)
+
+      // The height is written when it differs from what the box wears - and a box that has never been measured
+      // wears no height at all, which is not a difference a subtraction can find: NaN out of a subtraction is NaN,
+      // and NaN over the comparison is false.  Without this second half of the test the markup's "no height" was
+      // never replaced by a height, the box kept whatever its row happened to leave it, and the reading ended
+      // wherever the row ended instead of at the line the viewer drew.
+      if (!double.IsNaN(room) && (double.IsNaN(detailsWords.Height) || Math.Abs(detailsWords.Height - room) > 0.5))
         detailsWords.Height = room;
 
       FitLifeIntoTheColumn();
     }
 
     /// <summary>
-    /// Cuts the life to the lines the row under the picture can actually show, which is the second half of the
-    /// shelf's law for a plot (MediaBrowserView.FitStoryIntoThePanel): the number of lines is counted out of the
-    /// height the scroller was ARRANGED at, never out of a number written in markup, because how much of the panel
-    /// reaches below the picture is only known once the panel has been laid out.  The first half of that law - the
-    /// box's MaxHeight - is not needed here and is deliberately not copied: the person's picture is a written square
-    /// rather than a cover the view model sizes, so the row under it is a row of "*" that cannot be argued with, and
-    /// writing a height derived from the box's own arranged position back onto that box is a loop that settles on a
-    /// wrong answer (which is exactly how a life once came to stand over its own picture).
+    /// Measures the picture down to what the column can spare and cuts the life short at the foot of the box, by the
+    /// two measures the shelf uses and no others: the shelf never insists on a poster of a written size either
+    /// (MediaBrowserViewModel sizes its cover out of the room, and on a window of seven hundred and twenty lines that
+    /// cover stands two hundred and eighteen lines high rather than the four hundred the markup offers it), and its
+    /// plot is cut to what the box has left from where the reading begins downwards, floored by one story's worth
+    /// (<see cref="ShelfDetailsColumn.WORDS_FLOOR"/>), with the number of lines counted out of that height rather
+    /// than out of a number written in markup (MediaBrowserView.<c>FitStoryIntoThePanel</c>).
+    ///
+    /// Both halves read the height this class WROTE onto the box (<see cref="FitWordsIntoThePanel"/>) and not the
+    /// box's arranged bounds: a height derived from this box's own arranged position and written back onto it is a
+    /// loop that settles on a wrong answer, which is exactly how a life once came to stand over its own picture.
+    /// The picture's top edge is asked of the face, and that edge does not move when the face is measured down, so
+    /// the two measures settle in one pass.
     /// </summary>
     private void FitLifeIntoTheColumn()
     {
+      double box = detailsWords.Height;
+      if (double.IsNaN(box) || double.IsInfinity(box))
+        return;
+
+      double life_room = ShelfDetailsColumn.WORDS_FLOOR;
+
+      // THE PICTURE YIELDS BEFORE THE READING DOES, which is what the shelf's picture row does with the cover it
+      // holds: the shelf never insists on a poster of a written size - its cover is measured out of the room
+      // (MediaBrowserViewModel.DetailsPictureRowHeight), and on a window of seven hundred and twenty lines that
+      // cover stands two hundred and eighteen lines high rather than the four hundred the markup offers it.  A
+      // person's face is written as a square of three hundred and eighty lines, so on a short window it has to be
+      // measured the same way or the row under it is squeezed out of the box: the life then begins below the
+      // foot of the words and every one of its lines falls under the clip.
+      // A name the library tells no life for has the whole column for its picture, so nothing is measured down
+      // there: the row that would have held the reading is simply left to the face (ShowsBiography).
+      double face_top = detailsFace.Bounds.Y - detailsFace.Margin.Top;
+      double life_gap = biographyScroller.Margin.Top;
+      double room_for_the_picture = biographyScroller.IsVisible
+          ? box - life_room - life_gap - face_top
+          : double.NaN;
+      double side = double.IsNaN(room_for_the_picture)
+          ? FACE_DRAWN
+          : Math.Clamp(room_for_the_picture - detailsFace.Margin.Top, FACE_MIN, FACE_DRAWN);
+
+      if (Math.Abs(detailsFace.Height - side) > 0.5)
+      {
+        detailsFace.Width = side;
+        detailsFace.Height = side;
+      }
+
+      // The name's own writing travels with the face it stands beside, in the proportion it was asked for (the
+      // double of the album's lettering), so that the pair keeps the shape the viewer measured at full height.
+      double lettering = Math.Round(FACE_LETTERING * side / FACE_DRAWN);
+      if (Math.Abs(detailsLettering.Height - lettering) > 0.5)
+        detailsLettering.Height = lettering;
+
+      // The life is then cut at the foot of the box, exactly as the shelf cuts its plot.
+      double left = box - biographyScroller.Bounds.Y;
+      if (!double.IsNaN(left) && !double.IsInfinity(left) && left > life_room)
+        life_room = left;
+
+      if (Math.Abs(biographyScroller.MaxHeight - life_room) > 0.5)
+        biographyScroller.MaxHeight = life_room;
+
       double line = biographyWords.LineHeight;
-      int lines = line > 0 ? (int)(biographyScroller.Bounds.Height / line) : 0;
+      int lines = line > 0 ? (int)(life_room / line) : 0;
       if (lines < 1)
         lines = 1;
       if (biographyWords.MaxLines != lines)

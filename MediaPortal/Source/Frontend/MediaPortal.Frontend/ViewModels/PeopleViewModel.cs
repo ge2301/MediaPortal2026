@@ -32,16 +32,25 @@ using System.Threading.Tasks;
 namespace MediaPortal.Frontend.ViewModels
 {
   /// <summary>
-  /// Which wall of people a screen shows.  Three walls rather than one, because the three are read from three
-  /// shelves and remembered apart: the people who acted in the films, the people who acted in the series, and the
-  /// people who made the records.  A wall of "all people" would be one answer to a question nobody asks - a viewer
-  /// standing in front of their films wants to know who played in <em>them</em>.
+  /// Which wall of people a screen shows.  Three walls of the viewer's own making rather than one, because the three
+  /// are read from three shelves and remembered apart: the people who acted in the films, the people who acted in the
+  /// series, and the people who made the records.  A wall of "all people" would be one answer to a question nobody
+  /// asks - a viewer standing in front of their films wants to know who played in <em>them</em>.
   /// </summary>
+  /// <remarks>
+  /// The fourth member is not a wall a viewer walks to from the door: <see cref="SongArtists"/> is the same question
+  /// as the records' wall asked at the tunes instead of the albums, and it exists because a tune's row of artists
+  /// names people the album wall has never heard of.  Measured on the running library: of the 28 people named by
+  /// eight songs, 12 are on nobody's album wall (the featured singers of a record), while
+  /// <c>aspect=AudioItem&amp;roles=artist</c> answers them all - 376 names.  Standing a click on one of those cards on
+  /// the album wall would search 36 names for a singer who is not among them and answer "nothing found".
+  /// </remarks>
   public enum PeopleShelf
   {
     FilmActors,
     SeriesActors,
-    Artists
+    Artists,
+    SongArtists
   }
 
   /// <summary>
@@ -337,6 +346,10 @@ namespace MediaPortal.Frontend.ViewModels
             return "SeriesItem";
           case PeopleShelf.Artists:
             return "AlbumItem";
+          case PeopleShelf.SongArtists:
+            // The tunes' own shelf, which is what the server names the song aspect.  Asked of it, the singers of a
+            // tune - including the ones nobody's album ever bore - answer their names.
+            return "AudioItem";
           default:
             return "MovieItem";
         }
@@ -350,7 +363,15 @@ namespace MediaPortal.Frontend.ViewModels
     /// </summary>
     public string FilterClass
     {
-      get { return Shelf == PeopleShelf.Artists ? "artists" : "actors"; }
+      // Both record walls are the "artists" class; what tells them apart in the memory is the shelf they were read
+      // from, which the key already carries (AlbumItem#artists against AudioItem#artists).
+      get { return IsMusicWall ? "artists" : "actors"; }
+    }
+
+    /// <summary>Whether this wall is one of the two the records answer: the albums' artists and the tunes' artists.</summary>
+    private bool IsMusicWall
+    {
+      get { return Shelf == PeopleShelf.Artists || Shelf == PeopleShelf.SongArtists; }
     }
 
     /// <summary>
@@ -362,7 +383,9 @@ namespace MediaPortal.Frontend.ViewModels
     /// </summary>
     public bool OffersCollections
     {
-      get { return Shelf == PeopleShelf.Artists; }
+      // Measured on the running library: the tunes' wall hides two placeholders out of its 376 names just as the
+      // albums' wall hides two out of 36, so the row that lets them back in belongs to both.
+      get { return IsMusicWall; }
     }
 
     /// <summary>
@@ -390,8 +413,14 @@ namespace MediaPortal.Frontend.ViewModels
       get
       {
         // A record's artist is its album artist, not the artist of its tracks: a wall of 376 singers would be a
-        // wall of every song, while the records themselves are made by 37 people.
-        return new[] { Shelf == PeopleShelf.Artists ? "albumartist" : "actor" };
+        // wall of every song, while the records themselves are made by 37 people.  Which is exactly the wall a
+        // tune's own artist card has to stand on, so the two are asked apart and neither is ever shown the other's
+        // number of names.
+        if (Shelf == PeopleShelf.Artists)
+          return new[] { "albumartist" };
+        if (Shelf == PeopleShelf.SongArtists)
+          return new[] { "artist" };
+        return new[] { "actor" };
       }
     }
 
@@ -406,6 +435,8 @@ namespace MediaPortal.Frontend.ViewModels
             return "Series actors";
           case PeopleShelf.Artists:
             return "Artists";
+          case PeopleShelf.SongArtists:
+            return "Song artists";
           default:
             return "Film actors";
         }
@@ -1220,6 +1251,11 @@ namespace MediaPortal.Frontend.ViewModels
           Selected = stoodFor == Guid.Empty
               ? null
               : Rows.OfType<PersonTile>().FirstOrDefault(row => row.Id == stoodFor);
+
+          // A walk that came in from another screen is discharged here, on the names that just landed, and not before
+          // the wall has any: it is the one caret a screen is handed rather than one a viewer has to walk to.
+          if (Selected == null && _walk_to != Guid.Empty)
+            await StandWhereTheWalkAskedAsync();
         }
       }
       catch (Exception e)
@@ -1707,6 +1743,88 @@ namespace MediaPortal.Frontend.ViewModels
     {
       Search = words ?? "";
       await ReadAsync(true);
+    }
+
+    /// <summary>The person a walk from another screen asked this wall to stand on.</summary>
+    private Guid _walk_to;
+
+    /// <summary>The name that person is to be searched under, which is the only way a wall finds a name it has not read.</summary>
+    private string? _walk_word;
+
+    /// <summary>
+    /// Arms this wall to stand its caret on one person as soon as it has names to stand it on.  A wall is opened
+    /// empty - the screen reads it after it was pushed - so the walk cannot select a tile here and now; it says whom
+    /// to look for, and <see cref="ReadAsync"/> discharges the promise on the page that arrived.
+    /// </summary>
+    /// <param name="id">
+    /// The person's own id, which is what the standing is decided by: two people of one name are two people, and the
+    /// card that was pressed knows which of them it was.
+    /// </param>
+    /// <param name="name">Their name, which is what the wall is searched under.</param>
+    /// <remarks>
+    /// The name goes to the server rather than being looked for in the names that happen to have arrived, because a
+    /// wall of 7543 film actors has read thirty of them when the walk comes in.  A wall that cannot find the person
+    /// keeps the word standing in its field and the caret nowhere, which is the screen saying plainly that this
+    /// library holds no such name rather than opening on an unrelated one.
+    /// </remarks>
+    public void WalkTo(Guid id, string name)
+    {
+      _walk_to = id;
+      _walk_word = (name ?? "").Trim();
+    }
+
+    /// <summary>
+    /// Who a walk asked this wall to stand on and has not stood on yet: the promise <see cref="WalkTo"/> makes and
+    /// <see cref="ReadAsync"/> discharges.  The screen has no use for it - it sees the caret stand - so this is the
+    /// eye a test needs on a card handing its person over before any wall has been read.
+    /// </summary>
+    internal (Guid Id, string Word) WalkAskedFor
+    {
+      get { return (_walk_to, _walk_word ?? ""); }
+    }
+
+    /// <summary>
+    /// Stands the caret on the person a walk asked for, once the wall has been cut to their name.  Called at the end
+    /// of a read that landed, never at the end of a page being appended to: the walk wants one name, and the cut is
+    /// the shortest road to it.
+    /// </summary>
+    private async Task StandWhereTheWalkAskedAsync()
+    {
+      Guid wanted = _walk_to;
+      string word = _walk_word ?? "";
+      if (wanted == Guid.Empty)
+        return;
+
+      // Spent whatever comes of it: a name this wall cannot find must not ask again on every page after this.
+      _walk_to = Guid.Empty;
+      _walk_word = null;
+      if (word.Length == 0)
+        return;
+
+      if (!string.Equals(Search, word, StringComparison.Ordinal))
+      {
+        // The field wears the word the wall was cut to.  A wall of one name under an empty field reads as a library
+        // that holds one name, and the mark that gives the whole wall back only stands where a searched word is.
+        // The writing is the program's and not a hand's, so it does not start the typing pause - the same guard by
+        // which ClearSearchAsync empties the box without asking the wall a second time.
+        _writingWords = true;
+        try
+        {
+          SearchText = word;
+        }
+        finally
+        {
+          _writingWords = false;
+        }
+
+        await FindAsync(word);
+      }
+
+      PersonTile? found = Rows.OfType<PersonTile>().FirstOrDefault(row => row.Id == wanted)
+          ?? Rows.OfType<PersonTile>().FirstOrDefault(
+              row => string.Equals(row.Name, word, StringComparison.OrdinalIgnoreCase));
+      if (found != null)
+        Selected = found;
     }
 
     /// <summary>

@@ -5326,6 +5326,127 @@ namespace Tests.Frontend
     }
 
     /// <summary>
+    /// The names of a reading are a way into the wall of those names: the Enter of an actor's card opens the wall of
+    /// actors with its caret promised to that actor, and a director's card stays a face with a name under it, because
+    /// this front end has no wall of directors to open.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The walk is promised by the person's <b>id</b> and not by their spelling.  Measured on the running library
+    /// before this was written down: the tunes' wall answers "David Guetta" twice out of its 376 names, so a card
+    /// that handed over a name would stand the caret on whichever of the two the wall happened to list first - while
+    /// the card and the wall read the same MediaItemId, which is one number that never lies.
+    /// </para>
+    /// <para>
+    /// That the wall is opened <i>cut</i> to the name is the same measure for the same reason: a film's actors wall
+    /// holds 7543 names and has read thirty of them when the press comes in, and the only party who knows where the
+    /// four thousandth name stands is the server.  The field wears the name, so the cut explains itself, and the mark
+    /// at the field's hand gives the whole wall back.
+    /// </para>
+    /// </remarks>
+    [AvaloniaTest]
+    public void TheActorsOfAReadingAreLinksIntoTheirWallAndADirectorStandsStill()
+    {
+      DetailsServer server = new DetailsServer(HttpStatusCode.OK,
+          "{\"id\":\"" + TITANIC + "\",\"title\":\"Alien\",\"year\":1979}",
+          null, null,
+          "{\"id\":\"" + TITANIC + "\",\"groups\":[{\"role\":\"actor\",\"persons\":["
+          + "{\"id\":\"11111111-1111-1111-1111-111111111111\",\"name\":\"Sigourney Weaver\"},"
+          + "{\"id\":\"22222222-2222-2222-2222-222222222222\",\"name\":\"John Hurt\"}]},"
+          + "{\"role\":\"director\",\"persons\":[{\"id\":\"44444444-4444-4444-4444-444444444444\","
+          + "\"name\":\"Ridley Scott\"}]}]}");
+      MediaBrowserViewModel browser = BrowserOn(server);
+      TitleViewModel alien = new TitleViewModel(
+          new MediaTitle(new Guid(TITANIC), "Alien", null, 1979, null, null, false));
+      browser.Titles.Add(alien);
+      browser.Selected = alien;
+      WaitUntil("the people to arrive", delegate { return browser.ShowsActors && browser.ShowsDirectors; });
+
+      var workflow = new WorkflowManager();
+      ShellWindow window = new ShellWindow(workflow, delegate (WorkflowFrame frame)
+      {
+        return new MediaBrowserView((MediaBrowserViewModel) frame.ViewModel);
+      });
+      window.Width = 1920;
+      window.Height = 1080;
+      workflow.Push(new WorkflowFrame("titles", "Movies", browser));
+      window.Show();
+      Pump();
+
+      MediaTitleAction reading = MediaTitleActions.For(alien, true, true)
+          .First(action => action.Kind == MediaTitleActionKind.Information);
+      ((CommunityToolkit.Mvvm.Input.IAsyncRelayCommand<MediaTitleAction>) browser.RunTitleActionCommand)
+          .ExecuteAsync(reading).Wait();
+      Pump();
+
+      List<Border> actors = TrackCardsOf(window, "actorsScroller");
+      List<Border> directors = TrackCardsOf(window, "directorsScroller");
+      Assert.That(actors, Has.Count.EqualTo(2));
+      Assert.That(directors, Has.Count.EqualTo(1));
+
+      List<PeopleViewModel> walls = new List<PeopleViewModel>();
+      browser.PeopleWallRequested += delegate (object? from, PeopleViewModel wall) { walls.Add(wall); };
+
+      Press(actors[0], Key.Enter);
+      Assert.That(walls, Has.Count.EqualTo(1),
+          "the Enter of an actor's card is a viewer asking to see that actor, which is the walk onto their wall");
+      Assert.That(walls[0].AspectName, Is.EqualTo("MovieItem"), "of this shelf's actors");
+      Assert.That(walls[0].Roles, Is.EqualTo(new[] { "actor" }));
+      Assert.That(walls[0].WalkAskedFor.Id, Is.EqualTo(new Guid("11111111-1111-1111-1111-111111111111")),
+          "the person the card was standing for is handed over, and not their spelling");
+      Assert.That(walls[0].WalkAskedFor.Word, Is.EqualTo("Sigourney Weaver"));
+      Assert.That(workflow.Current?.StateId, Is.EqualTo("people"),
+          "the wall goes onto the workflow, so the way back leads to the reading the card was pressed in");
+
+      Press(directors[0], Key.Enter);
+      Assert.That(walls, Has.Count.EqualTo(1),
+          "a director is a face with a name under it and no wall behind it, so nothing is asked and no screen is "
+          + "moved under a press that would mean nothing");
+      Assert.That(directors[0].IsKeyboardFocusWithin, Is.True,
+          "and the caret keeps the card it stood on");
+
+      Press(actors[1], Key.Enter);
+      Assert.That(walls, Has.Count.EqualTo(2), "every actor of the reading is a link, not only the first");
+      Assert.That(walls[1].WalkAskedFor.Id, Is.EqualTo(new Guid("22222222-2222-2222-2222-222222222222")),
+          "each card hands over its own person");
+      window.Close();
+    }
+
+    /// <summary>
+    /// Which wall a name opens turns on the part the person played in the title the card stood in, and not on the
+    /// shelf the viewer happened to be walking: an album's artist opens the wall of the records (36 names on this
+    /// household's library), a tune's singer opens the wall of the tunes (376 of them), and the two walls are asked
+    /// apart because a fifth of the names a song was tagged with never made an album that bore them.
+    /// </summary>
+    [AvaloniaTest]
+    public void AnArtistCardOpensTheWallOfTheTunesAndAnAlbumArtistCardTheWallOfTheRecords()
+    {
+      MediaBrowserViewModel films = BrowserOn(new DetailsServer(HttpStatusCode.OK,
+          "{\"id\":\"" + TITANIC + "\",\"title\":\"Alien\",\"year\":1979}"));
+      PersonCard singer = new PersonCard(new Guid("55555555-5555-5555-5555-555555555555"), "David Guetta");
+      PersonCard record = new PersonCard(new Guid("66666666-6666-6666-6666-666666666666"), "The Gloaming");
+
+      List<PeopleViewModel> walls = new List<PeopleViewModel>();
+      films.PeopleWallRequested += delegate (object? from, PeopleViewModel wall) { walls.Add(wall); };
+
+      films.OpenPersonWall(singer, "artist");
+      films.OpenPersonWall(record, "albumartist");
+      films.OpenPersonWall(singer, "actor");
+
+      Assert.That(walls, Has.Count.EqualTo(3));
+      Assert.That(walls[0].AspectName, Is.EqualTo("AudioItem"),
+          "the singers of the tunes are asked of the tunes, which is the shelf the server names for them");
+      Assert.That(walls[0].Roles, Is.EqualTo(new[] { "artist" }));
+      Assert.That(walls[0].WallLabel, Is.EqualTo("Song artists"));
+      Assert.That(walls[1].AspectName, Is.EqualTo("AlbumItem"));
+      Assert.That(walls[1].Roles, Is.EqualTo(new[] { "albumartist" }),
+          "a record's artist is the one who made the record, not the one who sang one song of it");
+      Assert.That(walls[2].AspectName, Is.EqualTo("MovieItem"),
+          "and a name that played a part is asked of the shelf the viewer is standing on");
+      Assert.That(walls[2].Roles, Is.EqualTo(new[] { "actor" }));
+    }
+
+    /// <summary>
     /// A reading that stands up before the server has answered what the file holds still takes the caret onto
     /// the card at the head of its first band, as soon as there is one to stand on.
     /// </summary>
