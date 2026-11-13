@@ -59,6 +59,13 @@ namespace MediaPortal.Frontend
     /// the row on the settings screen says what really plays.
     /// </summary>
     private string? _soundTried;
+
+    /// <summary>
+    /// The sound card the running sound engine was built with, as the settings file named it. Compared with the
+    /// next saved answer to notice that only the card moved - the engine stayed the same, and a card is worth
+    /// rebuilding the engine for even then.
+    /// </summary>
+    private string? _soundOutput;
     private readonly ServerSettings? _settings;
     private readonly string? _settingsPath;
     private readonly bool _serverMayBeChanged;
@@ -271,6 +278,12 @@ namespace MediaPortal.Frontend
     /// rather than a film. Its answer is taken the next time the front end starts, which is what its row says.
     /// </para>
     /// <para>
+    /// A different <i>card</i> is the same mechanic with one difference: the tune that is playing has to come
+    /// along, because the card is exactly what the engine being left can no longer reach. It is picked up where
+    /// the viewer stood and opened on the new engine, which costs one re-buffer and is what pressing the row
+    /// asked for.
+    /// </para>
+    /// <para>
     /// An engine that says no leaves the one already playing in charge and is not asked again in this run; the
     /// sentence goes where a person reading the console will see it.
     /// </para>
@@ -280,12 +293,27 @@ namespace MediaPortal.Frontend
       if (_nowPlaying == null)
         return;
       PlayerEngine named = PlayerEngines.Resolve(saved.AudioEngine, PlayerEngines.BassKey);
-      if (named.Describes(_soundPlayer)
-          || string.Equals(named.Key, _soundTried, StringComparison.OrdinalIgnoreCase))
+      bool otherEngine = !named.Describes(_soundPlayer);
+      bool otherCard = !string.Equals(Said(saved.AudioOutput), Said(_soundOutput), StringComparison.OrdinalIgnoreCase);
+      if (!otherEngine && !otherCard)
+        return;
+
+      if (!otherEngine && _soundPlayer is not BassPlayer)
       {
+        // The card row belongs to the engine that reads its own output. libVLC hands the samples to whatever the
+        // operating system picked and cannot be pointed elsewhere, which is what the row itself says.
         return;
       }
-      _soundTried = named.Key;
+      if (otherEngine)
+      {
+        if (string.Equals(named.Key, _soundTried, StringComparison.OrdinalIgnoreCase))
+          return;   // asked once, said no, said it once
+        _soundTried = named.Key;
+      }
+
+      // Read before the new engine is built, not after: a new engine reaching for another card is what stops the
+      // tune that is playing, so the standing point only exists on this side of the call.
+      long standingAtMs = _nowPlaying.PositionMilliseconds;
 
       PlayerBuild built = named.Build(new PlayerOptions { AudioOutputId = saved.AudioOutput });
       if (!built.Succeeded)
@@ -295,10 +323,20 @@ namespace MediaPortal.Frontend
       }
 
       _soundPlayer = built.Player;
-      _nowPlaying.UseSoundEngine(built.Player);
+      _soundOutput = saved.AudioOutput;
+      // Another engine gets the next tune; another card has to take this tune with it, because the card is
+      // precisely what the engine being left cannot go on reaching. -1 says "carry nothing".
+      _nowPlaying.UseSoundEngine(built.Player, otherEngine ? -1 : standingAtMs);
       // The bars ask their numbers of whatever plays sound now, not of the engine the run started with.
       _nowPlaying.Spectrum = built.Player as IAudioSpectrumSource;
-      Console.WriteLine("audio:    " + built.EngineDescription);
+      string card = (built.Player as BassPlayer)?.OutputDescription ?? "";
+      Console.WriteLine("audio:    " + built.EngineDescription
+          + (otherCard && card.Length > 0 ? " - " + card : string.Empty));
+    }
+
+    static string Said(string? answer)
+    {
+      return (answer ?? string.Empty).Trim();
     }
 
     public override void Initialize()
@@ -397,7 +435,11 @@ namespace MediaPortal.Frontend
           // and the skip and volume keys read their reach from the same answer. Read once at start-up -
           // the settings screen saves at once, and the next media picks the new answers up because the
           // player re-reads Preferences on every Play and ReadTracks.
-          _nowPlaying.Preferences = Settings.PlaybackSettings.Load(null, out _);
+          Settings.PlaybackSettings atStartUp = Settings.PlaybackSettings.Load(null, out _);
+          _nowPlaying.Preferences = atStartUp;
+          // The card the program built its sound engine from is the answer this machine stands on, so that the
+          // next saved answer has something to be compared against.
+          _soundOutput = atStartUp.AudioOutput;
 
           // And when an answer is saved, the player adopts the very instance that was saved - the settings
           // screen's rows and the keys of the playback screen never disagree about the next media. An engine the

@@ -2747,6 +2747,44 @@ namespace MediaPortal.Frontend.ViewModels
       }
     }
 
+    /// <summary>
+    /// Take the engine that gets the next tune and carry the tune that is playing over to it.
+    /// </summary>
+    /// <param name="engine">The engine to hand tunes to from here on.</param>
+    /// <param name="carryFromMs">
+    /// Where the tune being carried stands, in milliseconds; a negative number carries nothing. The caller reads
+    /// that number <i>before</i> it builds the new engine, because the engine that reaches for a different sound
+    /// card takes the card away from the tune already playing - by the time the new engine has answered, the
+    /// position the viewer is standing on is gone.
+    /// </param>
+    /// <remarks>
+    /// Carrying is the exception, not the rule: <see cref="UseSoundEngine(IVideoPlayer?)"/> deliberately leaves a
+    /// media where it is, because moving one that is halfway through costs a stop and a re-buffer. What has to
+    /// move is the tune whose sound card was changed - that card is exactly what the old engine cannot keep.
+    /// </remarks>
+    public void UseSoundEngine(IVideoPlayer? engine, long carryFromMs)
+    {
+      IVideoPlayer? left = _sound;
+      MediaLocation? moving = carryFromMs >= 0 && _hasMedia && ReferenceEquals(_player, left)
+          ? _player!.Current
+          : null;
+      Guid? carriedId = _mediaItemId;
+      string carriedName = _title;
+      long lengthMs = _lengthMs;
+
+      UseSoundEngine(engine);
+      if (moving is not MediaLocation carried)
+        return;
+
+      // The resume goes in at the share the engines' own percentage can hold, and is pulled towards the exact
+      // millisecond the moment the new engine has said how long the media is: the first is the answer that still
+      // works when the length only arrives with a later state event, the second is the answer the viewer stood on.
+      int percent = lengthMs > 0 ? (int)Math.Round(carryFromMs * 100.0 / lengthMs) : 0;
+      if (!Play(carried, carriedId, percent, carriedName) || lengthMs <= 0 || _lengthMs <= 0)
+        return;
+      SeekToFraction((double)carryFromMs / _lengthMs);
+    }
+
     public void Dispose()
     {
       if (_disposed)
@@ -2777,12 +2815,38 @@ namespace MediaPortal.Frontend.ViewModels
         engine.PositionChanged += OnPositionChanged;
         engine.Failed += OnPlayerFailed;
         engine.EndOfMedia += OnEndOfMedia;
+        if (engine is IStreamMetaSource hearsMeta)
+          hearsMeta.MetaChanged += OnStreamMeta;
         return;
       }
       engine.StateChanged -= OnPlayerEvent;
       engine.PositionChanged -= OnPositionChanged;
       engine.Failed -= OnPlayerFailed;
       engine.EndOfMedia -= OnEndOfMedia;
+      if (engine is IStreamMetaSource stopsHearing)
+        stopsHearing.MetaChanged -= OnStreamMeta;
+    }
+
+    /// <summary>
+    /// What the stream says this piece of sound is called.
+    /// </summary>
+    /// <remarks>
+    /// The name the viewer picked the media by stands on the screen until the media itself says otherwise: for a
+    /// file that is never, and for a station it is every few minutes. The second line of the display keeps the
+    /// name the stream was opened under, which for radio is the station while the line above it names the track -
+    /// the two lines the reference's radio screen had, without a screen of its own.
+    /// </remarks>
+    private void OnStreamMeta(object? sender, StreamMetaEventArgs args)
+    {
+      if (!PlaysHere(sender))
+        return;
+      _marshal(delegate
+      {
+        if (string.Equals(_title, args.Line, StringComparison.Ordinal))
+          return;
+        _title = args.Line;
+        Raise();
+      });
     }
 
     /// <summary>

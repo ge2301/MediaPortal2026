@@ -116,7 +116,8 @@ public partial class PlaybackSettingsViewModel : ObservableObject
 
       Options.Add(new SkinSettingOption("Sound card",
           "Which output the BASS engine is told to use. The first answer hands the choice back to the engine, "
-          + "which takes the card the operating system picked. Asked of libVLC this changes nothing.",
+          + "which takes the card the operating system picked. Asked while a tune plays, the tune is carried to "
+          + "the card where it stood. Asked of libVLC this changes nothing.",
           SoundCardText, AdvanceSoundCard, Changed));
     }
 

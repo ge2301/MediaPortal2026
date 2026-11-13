@@ -55,7 +55,7 @@ namespace MediaPortal.Frontend.Player
   /// itself, which needs no second stream and no mixer.
   /// </para>
   /// </remarks>
-  public sealed class BassPlayer : IVideoPlayer, IAudioSpectrumSource
+  public sealed class BassPlayer : IVideoPlayer, IAudioSpectrumSource, IStreamMetaSource
   {
     /// <summary>
     /// The rate the output device is opened at. Each stream keeps its own rate and BASS resamples on the way
@@ -344,6 +344,12 @@ namespace MediaPortal.Frontend.Player
     /// <inheritdoc/>
     public event EventHandler<PlaybackPositionEventArgs>? PositionChanged;
 
+    /// <inheritdoc/>
+    public event EventHandler<StreamMetaEventArgs>? MetaChanged;
+
+    /// <summary>What the stream last called itself, so that a server repeating its title does not repeat the screen.</summary>
+    string? _metaSaid;
+
     /// <summary>
     /// Load a media and start it.
     /// </summary>
@@ -402,6 +408,9 @@ namespace MediaPortal.Frontend.Player
       {
         _stream = handle;
         _current = location;
+        // What the last stream called itself is not what this one calls itself, and a screen that kept the old
+        // line would show yesterday's track under today's.
+        _metaSaid = null;
       }
 
       // The end has to be listened for rather than polled: the position runs out before the sound does, and a
@@ -838,6 +847,138 @@ namespace MediaPortal.Frontend.Player
           return;
       }
       AnnouncePosition(false);
+
+      // What a stream calls itself is asked of the engine on this same beat rather than waited for: a Shoutcast
+      // server sends its next title when it likes, and a callback of BASS's own would have to be kept, pinned and
+      // let go again for every media, for a question that costs one call every three seconds.
+      if (++_metaBeats % MetaAskEveryBeats == 0)
+        AskMeta();
+    }
+
+    /// <summary>How many beats to let pass between one question and the next - fifteen beats is three seconds.</summary>
+    const int MetaAskEveryBeats = 15;
+
+    /// <summary>Beats since the last question, so that the asking does not run at the rate of the position.</summary>
+    int _metaBeats;
+
+    /// <summary>
+    /// Ask the stream what this piece of sound is called and say so when it answered differently than last time.
+    /// </summary>
+    /// <remarks>
+    /// The stream's own metadata (<c>BASS_TAG_META</c>, "StreamTitle='whoever - whatever'" for Shoutcast) comes
+    /// first because it is about the track; the server's headers (<c>BASS_TAG_ICY</c>, "icy-name:") come after
+    /// because a station that never sends a track title is still worth naming. Both blocks are name and value
+    /// pieces with nothing between them but a nought byte, and both spell the separator differently - '=' for
+    /// the one, ':' for the other - which is why the reading is one loop with two answers.
+    /// </remarks>
+    void AskMeta()
+    {
+      int handle;
+      lock (_gate)
+      {
+        handle = _stream;
+      }
+      if (handle == 0)
+        return;
+
+      string? said = TagLine(handle, TagType.META) ?? TagLine(handle, TagType.ICY);
+      if (string.IsNullOrWhiteSpace(said) || string.Equals(said, _metaSaid, StringComparison.Ordinal))
+        return;
+      _metaSaid = said;
+      MetaChanged?.Invoke(this, new StreamMetaEventArgs(said!));
+    }
+
+    /// <summary>
+    /// The line a tag block names the current piece of sound by, or null when that block says nothing worth
+    /// showing: the track title when the block carries one, and the station's name or description when it does
+    /// not, because a screen that reads "unknown" gains nothing over a screen that keeps the name the shelf gave
+    /// the tune.
+    /// </summary>
+    static string? TagLine(int handle, TagType kind)
+    {
+      IntPtr block;
+      try
+      {
+        block = Bass.ChannelGetTags(handle, kind);
+      }
+      catch (Exception)
+      {
+        // A tag call over a stream that stopped between the check and here is not a media that went wrong.
+        return null;
+      }
+      if (block == IntPtr.Zero)
+        return null;
+
+      string? title = null;
+      string? station = null;
+      string? description = null;
+      foreach (string piece in TagPieces(block))
+      {
+        int split = piece.IndexOfAny(new[] { '=', ':' });
+        if (split <= 0)
+          continue;
+        string key = piece.Substring(0, split).Trim().ToLowerInvariant();
+        string value = piece.Substring(split + 1).Trim().Trim('\'', '"', ';', ' ').Trim();
+        if (value.Length == 0)
+          continue;
+        switch (key)
+        {
+          case "streamtitle":
+          case "icy-title":
+          case "title":
+            title = value;
+            break;
+          case "icy-name":
+          case "name":
+            station = value;
+            break;
+          case "icy-description":
+          case "description":
+            description = value;
+            break;
+        }
+      }
+
+      if (!string.IsNullOrWhiteSpace(title))
+        return title;
+      if (!string.IsNullOrWhiteSpace(description))
+        return description;
+      return station;
+    }
+
+    /// <summary>
+    /// The strings a tag block holds: name and value in one piece, every piece ended by a nought byte and the
+    /// whole block ended by one more. BASS hands the block over as memory rather than as a string, and taking
+    /// only the first piece would lose the station of a stream that names its track last - or the track of one
+    /// that names it second.
+    /// </summary>
+    /// <remarks>
+    /// Bounded by a stretch of bytes rather than by the block's own ending, because this reads engine memory
+    /// that a server on the internet partly chose: a block that never ends is answered with what was read, not
+    /// with a hang.
+    /// </remarks>
+    static List<string> TagPieces(IntPtr block)
+    {
+      List<string> pieces = new List<string>();
+      const int Cap = 8192;
+      int start = 0;
+      int length = 0;
+      while (start + length < Cap)
+      {
+        if (System.Runtime.InteropServices.Marshal.ReadByte(block, start + length) != 0)
+        {
+          length++;
+          continue;
+        }
+        if (length == 0)
+          break;
+        pieces.Add(System.Runtime.InteropServices.Marshal.PtrToStringUTF8(IntPtr.Add(block, start), length) ?? "");
+        start += length + 1;
+        length = 0;
+        if (pieces.Count >= 64)
+          break;
+      }
+      return pieces;
     }
 
     /// <summary>
