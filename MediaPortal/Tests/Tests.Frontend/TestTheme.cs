@@ -396,8 +396,9 @@ namespace Tests.Frontend
       Assert.That(((SolidColorBrush)button.BorderBrush).Color, Is.EqualTo(FrontendTheme.ColorOf("nereus", "OutlineBrush")));
       Assert.That(((SolidColorBrush)button.Foreground).Color, Is.EqualTo(FrontendTheme.ColorOf("nereus", "ButtonTextBrush")));
       Assert.That(((SolidColorBrush)list.Background).Color, Is.EqualTo(FrontendTheme.ColorOf("nereus", "PanelBrush")));
-      Assert.That(((SolidColorBrush)row.Background).Color, Is.EqualTo(FrontendTheme.ColorOf("nereus", "AccentBrush")),
-          "a selected row wears the accent, because that is where the skin put its brightest colour");
+      Assert.That(((SolidColorBrush)row.Background).Color, Is.EqualTo(FrontendTheme.ColorOf("nereus", "TextBrush")),
+          "a selected row wears the ground the worn face lays under it - Nereus lays a white sheet, and it is the "
+          + "face's own styles that have the last word here, not the chrome's fallback accent");
       Assert.That(((SolidColorBrush)entry.Background).Color, Is.EqualTo(FrontendTheme.ColorOf("nereus", "PanelBrush")));
 
       window.Close();
@@ -610,6 +611,8 @@ namespace Tests.Frontend
       HashSet<string> keys = new HashSet<string>(FrontendTheme.Keys, StringComparer.Ordinal);
       foreach (string dialog in FrontendTheme.DialogKeys)
         keys.Add(dialog);
+      foreach (string lettering in FrontendTheme.LetteringKeys)
+        keys.Add(lettering);
 
       foreach (string file in ScreenFiles())
       {

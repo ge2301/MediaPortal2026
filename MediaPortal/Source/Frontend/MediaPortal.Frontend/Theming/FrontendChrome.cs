@@ -37,9 +37,10 @@ namespace MediaPortal.Frontend.Theming
   /// They are built for one palette at a time by <see cref="FrontendTheme.Apply"/>, which adds them to the
   /// application only while a real skin is in charge and takes them off for the default palette - that
   /// television keeps exactly the pixels it always had. The states are the states a remote has: resting, the
-  /// walk-over, and the press. A selected row takes the accent, because that is where both skins put their
-  /// brightest colour, and its text goes to the screen's own background, which is the WMC selection bar in
-  /// colour terms.
+  /// walk-over, and the press. A selected row takes the accent as a fallback - the face's own styles are added
+  /// after these and answer that question for themselves, WMC with the same accent and Nereus with a white sheet
+  /// (see the comment at the top of its styles file) - and its text goes to the screen's own background, which is
+  /// the WMC selection bar in colour terms.
   /// </para>
   /// <para>
   /// What this does not touch: scroll bars, check boxes' boxes, sliders and flyouts stay Fluent's own - no skin

@@ -49,11 +49,13 @@ namespace Tests.Frontend
   public class TestSkinEngine
   {
     private string _previousAssetsRoot = "";
+    private string? _previousFolder;
 
     [SetUp]
     public void RememberTheAssetRoot()
     {
       _previousAssetsRoot = SkinEngine.AssetsRoot;
+      _previousFolder = SkinEngine.SkinsFolder;
     }
 
     [TearDown]
@@ -64,6 +66,7 @@ namespace Tests.Frontend
         FrontendTheme.Apply(app, FrontendTheme.DEFAULT_NAME, out _);
 
       SkinEngine.AssetsRoot = _previousAssetsRoot;
+      SkinEngine.SkinsFolder = _previousFolder;
     }
 
     [AvaloniaTest]
@@ -338,7 +341,10 @@ namespace Tests.Frontend
     public void ABrokenSkinIsSaidAndTheOldOneStaysOn()
     {
       // The tests carry their own skin under TestSkins/, so the broken one cannot be confused with a shipped
-      // skin: a manifest that lists a file which is not there.
+      // skin: a manifest that lists a file which is not there. The shipped faces are read off the assembly's
+      // assets, and a folder standing in front of them - the test binary's own, or a throwaway one left over -
+      // would be answered instead, so this test names no folder at all.
+      SkinEngine.SkinsFolder = null;
       SkinEngine.AssetsRoot = "avares://Tests.Frontend/TestSkins/";
 
       Assert.That(SkinEngine.Installed().Select(skin => skin.Name), Does.Contain("broken"),

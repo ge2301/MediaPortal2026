@@ -6702,3 +6702,71 @@ to the wall's law — and `TestMediaBrowser.cs` carries two more, one for the pr
 the pushed frame, and the director who stays still) and one for the part that decides the wall.  The green count of the
 next run belongs to that run.
 
+### do. Five questions the screens asked that no palette answered, and a standing row that had changed its mind
+
+The suite was run whole for the first time in a while and answered 28 failures out of 1654.  Two of them were
+`TestTheme`'s own law — *every name a screen asks has to be a key every palette answers* — holding the front end to its
+own sentence, and it was the front end that was wrong.  `MediaBrowserView` asked `TitleFadeBrush`, `DialogPlateBrush`
+and `DialogPlateCornerRadius`; `SleepTimerView` asked `SmallFontSize` and `SmallerFontSize`.  Nothing answered any of
+them, so a dialog's ground was transparent, a plate behind its title stood wherever the default font felt like
+standing, and a name written over a cover read straight off the picture with no fade under it.  The numbers are the
+skins' own, taken from their colour files rather than invented: the plate `#FF262626` with its corner of twenty, a
+small letter of thirty-three and a smaller of twenty-seven (both faces count the same), and the fade as three stops of
+black — `#E6000000`, `#99000000` at 0.55, transparent — laid bottom to top.  The five are furniture rather than colour,
+so they were not pushed into `FrontendTheme.Keys`, which is the list of *colours* every palette answers and every test
+reads back with `ColorOf`; they stand beside it as `DialogKeys` and the new `LetteringKeys`, and the law that hunts
+unanswered names now unions all three.  One name walked the other way: `DimTextBrush` was the colour of the word the
+player stood half-high over the film, and that word became a shape in `e7fe9db958`, so every palette was still
+answering a question no screen asks.  It left `Keys` and all three palettes, with a remark naming the commit that made
+it idle; the skins keep their copies, being copies of the reference's colour files, and a colour in a skin costs
+nothing.
+
+The other two of the colour fixtures were the opposite story, and worth telling because they were *green once*.
+`TestTheme.ASkinPaintsTheControlsNoScreenDrawsItself` and three of `TestTheRowAListStandsOnWearsTheSkinsColour` wanted
+the accent under the row a list stands on and were answered `White`.  Measured rather than argued: the chrome's
+`ListBoxItem:selected` rule is standing on the application, the row really does answer `:selected`, and the row is
+still white — because the worn face's own styles are added after the chrome and have the last word, which is the order
+`Apply` has always had.  What they say is written in `Skins/Nereus/themes/default/styles.xaml`: „a selected row takes
+the screen's own white and the screen's own black, rounded at five … It used to wear the accent turquoise, which is the
+skin's colour for surfaces at rest, not for the one row a person is actually on", and `templates.xaml` names who said
+it — the viewer, with „remove the turquoise parts".  So the tests were holding an old law while the front end kept a
+new one given by hand, and the law was re-told rather than the pixels moved: each face lays its own ground under the
+standing row (WMC its accent, as its reference did, Nereus the white sheet), and what no face may lay is the theme's
+stock blue, which stays the assertion that matters.  The colour-family test moved with it — the family cannot move the
+sheet any more, by that same law, so the test now presses the real „Skin colour" row and reads the **bar of a progress
+line**, which is a control no file of the skin's draws and which still has to follow the family without a restart,
+beside asserting that the sheet stays white as the family walks turquoise → yellow.  `FrontendChrome`'s own doc no
+longer claims both skins put their brightest colour under a selection; the accent there is named what it is, a fallback
+for a face whose markup is missing.
+
+Half of the remaining failures were not about the front end at all but about the ground a test run stands on, and they
+came down in two strokes.  `IsolatedMachineSettings` already pointed the client settings and the screens' memories at
+scratch files; the skin's own saved answers were still read from the machine — next to `theme.json`, in
+`%APPDATA%\MediaPortal`, on a development machine that had been used minutes before the run — so a screen built by a
+test that named no folder was dressed by whoever last sat on the couch.  `MP2_SKIN_SETTINGS_DIR` now names a scratch
+folder for the whole run.  The second stroke is a folder story of a different kind: `SkinEngine` reads a face from the
+disk folder when there is one and from the assembly's own assets when there is not, and both halves are statics a
+fixture can move.  A test that said „the shipped copy, not a viewer's folder" by setting `SkinsFolder = null` inherited
+`AssetsRoot` from whoever ran before it, and the refusal that follows is silent — `Apply` says no without a reason,
+because „no skin of that name exists" is not a complaint when nobody asked for a folder.  Those tests now say both
+halves out loud through `ShippedFaces.AnswerFromTheAssembly()`, and the one test that wants the suite's *own* broken
+skin says no folder at all and puts the previous folder back afterwards.  The product learned something from the same
+measure: a skin folder that has been collected is not a skin folder, and answering „which skins are there" with
+*none* strands a television whose viewer deleted a folder.  `Installed()` now says so through `SkinsFolderProblem` and
+wears the faces the assembly carries.
+
+**13 of 1654 stand after that, and they are named rather than counted.**  Six of them are pictures, and they are the
+next piece of work: `TestChromeHeader.ThePicturesOfTheBarStandOnOneLine` (two of the head line's marks come to rest at
+thirty units, the third at thirty-four, so one plate does not hug its art) and `.WhatTheServerIsDoingIsSaidInPictures
+AndNeverInWords` (the server's mark stands at the left edge of a 1280-wide window rather than right of the middle),
+`TestSkinHomeFiles.StandingOnACornerButtonLightsItsMarkAndNotItsPlate` (the mark of a stood-on corner button is not
+found at all), `TestTvChannelLogos` twice (`.ARowWithoutAPicturePutsItsNameWhereThePictureWouldStand` and
+`.TheScreenDrawsThePictureBesideTheRowItBelongsTo`), and `TestArtwork.ATitleOnTheScreenIsAskedForItsPictureOnce`.  Two
+are the household dialog: `.TheDialogStandsOnTheSkinsFrameRatherThanOnACollapsedBar` and `.BackspaceTakesTheNewest
+NumberBack`.  Four are the shelf: `TestMediaBrowser`'s `.BackLetsTheScreenGoEvenWhenEveryLayerIsUpAtOnce`,
+`.PickingAFilterOnAWallThatRecyclesStandsTheCaretOnATileInsideTheView`, `.TheWashBehindTheDetailsDarkensTheCornerThe
+FanartShinesThrough` and `.TheActorsOfAReadingAreLinksIntoTheirWallAndADirectorStandsStill`, and one is the wall's own
+walking, `TestNereusWallNavigation.RightFromTheHeadOfTheMenuReachesTheRowOfButtons` — a focused button that is not
+among the four the wall counts as its top row.  Every one of these is a law the front end once kept and no longer
+does, or a measure that has drifted; none of them is the machine's state, which is what the run had been drowning in.
+

@@ -48,9 +48,16 @@ namespace Tests.Frontend
   /// theme paints its selection inside the item's template, over the top of whatever the skin put on the item.
   /// </para>
   /// <para>
-  /// The colour a viewer picks on the skin settings screen is the same question, so the row that walks the eight
-  /// families has to move the painted row too - which is checked here through the real row, the real file and the
-  /// real re-dress, with the settings folder pointed at a directory of the test's own.
+  /// </para>
+  /// <para>
+  /// What the standing row is painted with is the face's own answer, and the two faces answer differently. WMC
+  /// keeps the accent under it, the way its reference did. Nereus lays a white sheet: the viewer named it
+  /// ("remove the turquoise parts"), and that face's accent is the colour of surfaces at rest, so a coloured box
+  /// under the one row a person is actually standing on said the wrong thing. What neither face may answer is the
+  /// theme's stock blue - which is what these tests hold onto, together with the second half of the question: the
+  /// colour picked on the skin settings screen has to reach the controls no screen of the skin paints, and reach
+  /// them without a restart. The front end's own face is not in the loop below because it keeps Fluent's pixels
+  /// on purpose; <c>TestTheme.TheDefaultPaletteLeavesTheControlsToFluentAlone</c> holds that.
   /// </para>
   /// </remarks>
   [TestFixture]
@@ -162,14 +169,31 @@ namespace Tests.Frontend
       return (highest + lowest) / 2.0;
     }
 
+    /// <summary>
+    /// What a list paints the ground of a progress line - the other control no file of the skin's draws by hand,
+    /// and the one that still wears the accent on every face.
+    /// </summary>
+    private static Color PaintedBar(out ProgressBar bar)
+    {
+      bar = new ProgressBar { Minimum = 0, Maximum = 10, Value = 4 };
+      Window window = new Window { Width = 500, Height = 200, Content = bar };
+      window.Show();
+      Pump();
+
+      Assert.That(bar.Foreground, Is.InstanceOf<ISolidColorBrush>(),
+          "the bar of a progress line is a flat colour, so it can be read back");
+      return ((ISolidColorBrush)bar.Foreground!).Color;
+    }
+
     [AvaloniaTest]
-    public void TheRowAListStandsOnIsTheSkinsAccentAndNotThePlatformsBlue()
+    public void TheRowAListStandsOnIsWhatTheFaceLaysAndNotThePlatformsBlue()
     {
       Wear("nereus");
       Color painted = PaintedRow(out _);
 
-      Assert.That(painted, Is.EqualTo(FrontendTheme.ColorOf("nereus", "AccentBrush")),
-          "the row a list is standing on has to be the colour the skin calls its accent");
+      Assert.That(painted, Is.EqualTo(FrontendTheme.ColorOf("nereus", "TextBrush")),
+          "Nereus lays a white sheet under the row a viewer stands on; its accent is the colour of surfaces at "
+          + "rest, so the standing row speaks on the sheet rather than on a box of turquoise");
       Assert.That(painted, Is.Not.EqualTo(PLATFORM_BLUE),
           "the platform's stock blue is the one colour a skinned front end must never paint a selection with");
     }
@@ -261,20 +285,27 @@ namespace Tests.Frontend
     }
 
     [AvaloniaTest]
-    public void EveryFacePaintsItsStandingRowItsOwnAccent()
+    public void EveryFaceLaysItsOwnGroundUnderTheStandingRow()
     {
-      foreach (string face in FrontendTheme.Names)
+      // What each face names as the ground under the row a viewer stands on, in the face's own words: WMC follows
+      // its reference and puts its brightest colour there, Nereus lays the screen's white and keeps its accent for
+      // surfaces at rest.
+      (string Face, string Key)[] grounds = { ("wmc", "AccentBrush"), ("nereus", "TextBrush") };
+
+      foreach ((string face, string key) in grounds)
       {
         Wear(face);
         Color painted = PaintedRow(out _);
 
-        Assert.That(painted, Is.EqualTo(FrontendTheme.ColorOf(face, "AccentBrush")),
-            face + " has to paint a selected row with the accent it names, not with a stock blue");
+        Assert.That(painted, Is.EqualTo(FrontendTheme.ColorOf(face, key)),
+            face + " has to paint the row a viewer stands on with the ground its own styles name");
+        Assert.That(painted, Is.Not.EqualTo(PLATFORM_BLUE),
+            face + " must not paint a standing row with the theme's stock blue");
       }
     }
 
     [AvaloniaTest]
-    public void TheColourRowMovesTheRowAListStandsOn()
+    public void TheColourRowMovesThePartsNoScreenPaints()
     {
       Application app = Application.Current!;
       Wear("nereus");
@@ -284,7 +315,9 @@ namespace Tests.Frontend
       SkinSettingOption colour = screen.Options.First(o => o.Label == "Skin colour");
 
       Assert.That(colour.ValueText, Is.EqualTo("Turquoise"));
-      Assert.That(PaintedRow(out _), Is.EqualTo(FrontendTheme.ColorOf("nereus", "AccentBrush")));
+      Assert.That(PaintedBar(out _), Is.EqualTo(FrontendTheme.ColorOf("nereus", "AccentBrush")));
+      Assert.That(PaintedRow(out _), Is.EqualTo(FrontendTheme.ColorOf("nereus", "TextBrush")),
+          "the sheet a viewer stands on is not the family's colour, so the family cannot paint it");
 
       // The viewer's press: the row walks to the next family, the file is written, and the television follows
       // without a restart - which is the whole point of asking the question on the couch.
@@ -296,8 +329,13 @@ namespace Tests.Frontend
 
       (string name, string light, string medium, string dark) = saved.ChosenColour;
       Assert.That(name, Is.EqualTo("Yellow"));
-      Assert.That(PaintedRow(out _), Is.EqualTo(Color.Parse(light)),
-          "picking a family has to repaint the row a list stands on, not only the parts the skin draws itself");
+
+      PaintedBar(out ProgressBar bar);
+      Assert.That(((ISolidColorBrush)bar.Foreground!).Color, Is.EqualTo(Color.Parse(light)),
+          "picking a family has to repaint the bar of a progress line - a control no file of the skin's draws - "
+          + "not only the parts the skin paints itself");
+      Assert.That(PaintedRow(out _), Is.EqualTo(FrontendTheme.ColorOf("nereus", "TextBrush")),
+          "... and it has to leave the sheet under the standing row alone, in every family");
     }
   }
 }

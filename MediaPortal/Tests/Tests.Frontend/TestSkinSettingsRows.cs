@@ -48,6 +48,7 @@ namespace Tests.Frontend
     public void BothShippedSkinsAnswerTheSettingsRow()
     {
       Application app = Application.Current!;
+      ShippedFaces.AnswerFromTheAssembly();
 
       Assert.That(SkinEngine.Apply(app, "nereus", out string? nereusProblem), Is.True, nereusProblem ?? "applied");
       Assert.That(Find(app, "SettingsRowTemplate"),

@@ -109,11 +109,15 @@ namespace MediaPortal.Frontend.Theming
 
     /// <summary>
     /// What every palette has to say something about. Named after the job on the screen, not after the colour.
+    /// One name has left this list: <c>DimTextBrush</c> was asked by the word the player stood half-high over the
+    /// film, and that word became a shape (<c>e7fe9db958</c>), so the colour was a palette's answer to a question
+    /// no screen asks any more. The skins keep their own copy of it - they are copies of the reference's colour
+    /// files, and a colour in a skin costs nothing.
     /// </summary>
     public static readonly string[] Keys =
     {
         "ScreenBackgroundBrush", "PanelBrush", "PanelRaisedBrush", "PanelPressedBrush", "OutlineBrush",
-        "VideoOutlineBrush", "TextBrush", "MutedTextBrush", "DimTextBrush", "ButtonTextBrush", "AccentBrush",
+        "VideoOutlineBrush", "TextBrush", "MutedTextBrush", "ButtonTextBrush", "AccentBrush",
         "WarningBrush", "ScrimBrush", "VideoBrush"
     };
 
@@ -125,7 +129,20 @@ namespace MediaPortal.Frontend.Theming
     /// </summary>
     public static readonly string[] DialogKeys =
     {
-        "DialogWashBrush", "DialogGroundBrush", "DialogFrameCornerRadius", "DialogTitleFontSize"
+        "DialogWashBrush", "DialogGroundBrush", "DialogFrameCornerRadius", "DialogTitleFontSize",
+        "DialogPlateBrush", "DialogPlateCornerRadius"
+    };
+
+    /// <summary>
+    /// The letters a caption is spelled in, and the fade it stands on.  Both shipped skins count these in the same
+    /// numbers (a small letter of thirty-three, a smaller of twenty-seven) and both lay one and the same fade under
+    /// a name that stands over a picture, so the three are furniture rather than colour: a screen that asks them has
+    /// to be answered by every palette, or its caption is spelled at whatever size the control theme feels like and
+    /// its name reads straight off the cover with nothing behind it.
+    /// </summary>
+    public static readonly string[] LetteringKeys =
+    {
+        "SmallFontSize", "SmallerFontSize", "TitleFadeBrush"
     };
 
     /// <summary>
@@ -148,7 +165,6 @@ namespace MediaPortal.Frontend.Theming
                 ["VideoOutlineBrush"] = "#FF243546",
                 ["TextBrush"] = "#FFE8EEF4",
                 ["MutedTextBrush"] = "#FF9FB6CC",
-                ["DimTextBrush"] = "#FF3D556B",
                 ["ButtonTextBrush"] = "#FFD3E0EC",
                 ["AccentBrush"] = "#FF63A8FF",
                 ["WarningBrush"] = "#FFFFB74D",
@@ -167,8 +183,7 @@ namespace MediaPortal.Frontend.Theming
                 ["OutlineBrush"] = "#33FFFFFF",            // DialogBorderColor
                 ["VideoOutlineBrush"] = "#FF666666",       // NereusGreyMedium
                 ["TextBrush"] = "#FFFFFFFF",               // TextColor
-                ["MutedTextBrush"] = "#FF9D9D9D",          // NereusColorLight_Grey
-                ["DimTextBrush"] = "#FF474747",            // NereusColorDark_Grey
+                ["MutedTextBrush"] = "#FF9D9D9D",              // NereusColorLight_Grey
                 ["ButtonTextBrush"] = "#FFFFFFFF",         // MenuTextForeground
                 ["AccentBrush"] = "#FF009592",             // NereusColorLight_Torquoise
                 ["WarningBrush"] = "#FFED7D31",            // NereusColorLight_Orange
@@ -187,7 +202,6 @@ namespace MediaPortal.Frontend.Theming
                 ["VideoOutlineBrush"] = "#80000000",       // ProgressBarBorderColor
                 ["TextBrush"] = "#FFFFFFFF",               // TextColor
                 ["MutedTextBrush"] = "#FFA4BCD2",          // MediaItemUnwatchedColor
-                ["DimTextBrush"] = "#FF475671",            // MediaItemOfflineColor
                 ["ButtonTextBrush"] = "#FFE0E0E0",         // ButtonStrokeColor, without its alpha
                 ["AccentBrush"] = "#FF4B76A0",             // ProgressBarFillColor
                 ["WarningBrush"] = "#FFFFB74D",            // this front end's own amber; WMC had no colour for a complaint
@@ -284,6 +298,29 @@ namespace MediaPortal.Frontend.Theming
       brushes["DialogGroundBrush"] = new SolidColorBrush(ParseColor(name, "DialogGroundBrush", "#FF1B1B1B"));
       brushes["DialogFrameCornerRadius"] = new CornerRadius(25);
       brushes["DialogTitleFontSize"] = 30d;
+
+      // The contents plate the dialog lays its answers on: a sheet one shade above the panel's ground, with a
+      // corner of its own inside the frame's (Nereus: FF262626 over a ground of 1B1B1B, a corner of 20).
+      brushes["DialogPlateBrush"] = new SolidColorBrush(ParseColor(name, "DialogPlateBrush", "#FF262626"));
+      brushes["DialogPlateCornerRadius"] = new CornerRadius(20);
+
+      // The letters of a caption and the fade they stand on, in the numbers both shipped skins spell them in
+      // (thirty-three and twenty-seven; the fade is black at ninety out of a hundred on the picture's own bottom
+      // edge, thinning to nothing at its top).  A wall of covers and the main menu's tiles paint the same fade on
+      // purpose, so a name reads the same whether it stands in the wall or in the rail - and it reads on this
+      // front end's own colours as it does under either skin.
+      brushes["SmallFontSize"] = 33d;
+      brushes["SmallerFontSize"] = 27d;
+
+      LinearGradientBrush fade = new LinearGradientBrush
+      {
+        StartPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+        EndPoint = new RelativePoint(0, 0, RelativeUnit.Relative)
+      };
+      fade.GradientStops.Add(new GradientStop(ParseColor(name, "TitleFadeBrush", "#E6000000"), 0));
+      fade.GradientStops.Add(new GradientStop(ParseColor(name, "TitleFadeBrush", "#99000000"), 0.55));
+      fade.GradientStops.Add(new GradientStop(ParseColor(name, "TitleFadeBrush", "#00000000"), 1));
+      brushes["TitleFadeBrush"] = fade;
 
       return brushes;
     }

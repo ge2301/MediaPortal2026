@@ -554,7 +554,21 @@ namespace MediaPortal.Frontend.Theming
     {
       string? folder = SkinsFolder;
       if (folder != null)
-        return InstalledFromFolder(folder);
+      {
+        // A folder that has been collected is not a skin folder, and the faces that ride inside this assembly are
+        // still there. Asked "which skins are there", answering with none because a named folder went away would
+        // strand a television whose viewer deleted a folder - and it would strand a test run, where throwaway
+        // folders are written and swept away all the time. The name is said out loud rather than swallowed.
+        if (!Directory.Exists(folder))
+        {
+          SkinsFolderProblem = "the skin folder \"" + folder + "\" is not a folder on this machine - the faces "
+              + "this assembly carries are worn instead";
+        }
+        else
+        {
+          return InstalledFromFolder(folder);
+        }
+      }
 
       List<SkinManifest> skins = new List<SkinManifest>();
 

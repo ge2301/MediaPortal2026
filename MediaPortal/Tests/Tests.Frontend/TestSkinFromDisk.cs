@@ -266,7 +266,7 @@ namespace Tests.Frontend
       Application app = Application.Current!;
 
       // The shipped copy, not a viewer's folder: this test is about the files that ride with the assembly.
-      SkinEngine.SkinsFolder = null;
+      ShippedFaces.AnswerFromTheAssembly();
 
       HomeView home = new HomeView(new HomeViewModel(), new WorkflowManager());
       home.ApplyTemplate();
@@ -288,7 +288,7 @@ namespace Tests.Frontend
     public void BothShippedSkinsSpeakTheShelfsTiles()
     {
       Application app = Application.Current!;
-      SkinEngine.SkinsFolder = null;
+      ShippedFaces.AnswerFromTheAssembly();
 
       string[] keys = new string[]
       {
@@ -320,7 +320,7 @@ namespace Tests.Frontend
    public void TheShippedWmcStandsOnItsOwnPicture()
    {
      Application app = Application.Current!;
-     SkinEngine.SkinsFolder = null;
+     ShippedFaces.AnswerFromTheAssembly();
 
      Assert.That(SkinEngine.Apply(app, "wmc", out string? problem), Is.True, problem ?? "");
      Assert.That(app.Resources.TryGetResource("SkinBackgroundImage", null, out object? image), Is.True,
