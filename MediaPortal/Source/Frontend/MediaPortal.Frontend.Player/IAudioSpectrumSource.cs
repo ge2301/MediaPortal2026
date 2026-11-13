@@ -42,8 +42,15 @@ namespace MediaPortal.Frontend.Player
   /// So the bars and their source are kept apart on purpose, and the distance between them is this nine-line
   /// interface. A screen draws what an engine tells it; an engine that cannot tell stays silent and the bars
   /// stand at their floor, which is the same answer the reference gives when its player is not active
-  /// (AudioSpectrumAnalyzer.cs:490-493: keep drawing, level nought, so the peaks fall). Today no engine in this
-  /// frontend implements this, and that is reported rather than hidden: the bars are drawn, and empty.
+  /// (AudioSpectrumAnalyzer.cs:490-493: keep drawing, level nought, so the peaks fall).
+  /// </para>
+  /// <para>
+  /// <see cref="BassPlayer"/> answers this interface by counting the samples of the channel it is already
+  /// playing, which needs no second stream. libVLC cannot be asked here and is asked elsewhere: its bands arrive
+  /// through <see cref="IAudioBandSource"/> from <see cref="VisualSpectrumTap"/>, a silent second engine that has
+  /// libVLC draw the spectrum as its own picture and reads that picture back. A screen therefore takes its bars
+  /// from one of the two seams, whichever the engine in front of it can fill; both are offered by
+  /// <c>NowPlayingViewModel</c>, and the bars stand at their floor only when neither has an answer yet.
   /// </para>
   /// </remarks>
   public interface IAudioSpectrumSource

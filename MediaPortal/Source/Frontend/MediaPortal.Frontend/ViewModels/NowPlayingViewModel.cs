@@ -91,6 +91,14 @@ namespace MediaPortal.Frontend.ViewModels
     /// </summary>
     private readonly List<IVideoPlayer> _retired = new List<IVideoPlayer>();
 
+    /// <summary>
+    /// Whether the screen on stage asked for the sound to be looked after for the bars. Remembered because the
+    /// bars belong to the engine that plays the tune rather than to the screen: when the tune is carried to
+    /// another engine, the question has to be taken back from the engine being stepped off and put to the new
+    /// one, or a retired libVLC goes on paying for a second decoder that draws for nobody.
+    /// </summary>
+    private bool _barsWatched;
+
     private readonly Action<Action> _marshal;
     private bool _disposed;
 
@@ -2131,12 +2139,13 @@ namespace MediaPortal.Frontend.ViewModels
     }
 
     /// <summary>
-    /// What the bars beside the record ask their numbers of: the engine that plays sound, when it can hand out the
-    /// loudness of the bands the control itself divides the sound into. Null while it cannot - which today means a
-    /// build whose sound comes from an engine that listens to nothing but libVLC's own spectrum picture - and the
-    /// bars then stand at their floor with their caps fallen, which is the same answer the reference's control
-    /// gives a player that is not active (Controls/AudioSpectrumAnalyzer.cs:490-493). Set by the application,
-    /// before any screen is built and again whenever the viewer moves the sound to another engine.
+    /// What the bars beside the record ask their numbers of when the engine playing them counts its own samples:
+    /// that is what BASS answers. Null for every other engine, which is not a silent engine - libVLC hands the
+    /// bars over <see cref="BandSpectrum"/> instead, from the spectrum picture its own listener draws. A screen
+    /// therefore asks both questions and draws from whichever has an answer; the bars stand at their floor with
+    /// their caps fallen only when neither has one yet, which is the same answer the reference's control gives a
+    /// player that is not active (Controls/AudioSpectrumAnalyzer.cs:490-493). Set by the application, before any
+    /// screen is built and again whenever the viewer moves the sound to another engine.
     /// </summary>
     public IAudioSpectrumSource? Spectrum { get; set; }
 
@@ -2157,6 +2166,7 @@ namespace MediaPortal.Frontend.ViewModels
     /// </summary>
     public void WatchSpectrum()
     {
+      _barsWatched = true;
       (_player as IAudioSpectrumWatcher)?.WatchSpectrum();
     }
 
@@ -2166,6 +2176,7 @@ namespace MediaPortal.Frontend.ViewModels
     /// </summary>
     public void StopWatchingSpectrum()
     {
+      _barsWatched = false;
       (_player as IAudioSpectrumWatcher)?.StopWatchingSpectrum();
     }
 
@@ -2758,9 +2769,10 @@ namespace MediaPortal.Frontend.ViewModels
     /// position the viewer is standing on is gone.
     /// </param>
     /// <remarks>
-    /// Carrying is the exception, not the rule: <see cref="UseSoundEngine(IVideoPlayer?)"/> deliberately leaves a
-    /// media where it is, because moving one that is halfway through costs a stop and a re-buffer. What has to
-    /// move is the tune whose sound card was changed - that card is exactly what the old engine cannot keep.
+    /// This is what the settings screen asks for when the viewer moved the sound: an answer that changed nothing
+    /// about the tune in front of them is an answer they cannot check. <see cref="UseSoundEngine(IVideoPlayer?)"/>
+    /// is the other answer - leave the media where it is - for a caller that has no position to hand over, and for
+    /// a media that was never on the engine being stepped off, which this method notices and leaves alone.
     /// </remarks>
     public void UseSoundEngine(IVideoPlayer? engine, long carryFromMs)
     {
@@ -2776,11 +2788,26 @@ namespace MediaPortal.Frontend.ViewModels
       if (moving is not MediaLocation carried)
         return;
 
+      // The bars belong to the engine that plays the tune, so they are packed with it. The question is taken back
+      // from the engine being stepped off while it still holds the media - a libVLC retired with its listener
+      // running keeps a second decoder drawing a spectrum for nobody - and put to the new engine once the tune
+      // stands on it, which is also where the bands change shape from BASS's counting to libVLC's drawing.
+      bool rewatch = _barsWatched;
+      if (rewatch)
+        StopWatchingSpectrum();
+
       // The resume goes in at the share the engines' own percentage can hold, and is pulled towards the exact
       // millisecond the moment the new engine has said how long the media is: the first is the answer that still
       // works when the length only arrives with a later state event, the second is the answer the viewer stood on.
       int percent = lengthMs > 0 ? (int)Math.Round(carryFromMs * 100.0 / lengthMs) : 0;
-      if (!Play(carried, carriedId, percent, carriedName) || lengthMs <= 0 || _lengthMs <= 0)
+      bool plays = Play(carried, carriedId, percent, carriedName);
+      if (rewatch)
+      {
+        WatchSpectrum();
+        // The screen holds its bars by this property, and it is a different engine's bands now.
+        Raise();
+      }
+      if (!plays || lengthMs <= 0 || _lengthMs <= 0)
         return;
       SeekToFraction((double)carryFromMs / _lengthMs);
     }
@@ -2840,8 +2867,11 @@ namespace MediaPortal.Frontend.ViewModels
     {
       if (!PlaysHere(sender))
         return;
+      IVideoPlayer? spoke = sender as IVideoPlayer;
       _marshal(delegate
       {
+        if (!PlaysHere(spoke))
+          return;
         if (string.Equals(_title, args.Line, StringComparison.Ordinal))
           return;
         _title = args.Line;
@@ -2854,6 +2884,16 @@ namespace MediaPortal.Frontend.ViewModels
     /// has nothing to say about the tune that plays now, and an answer from it would move a screen that was never
     /// asked to move.
     /// </summary>
+    /// <remarks>
+    /// Asked twice for every piece of news, and both answers are needed. The first is asked on the engine's thread,
+    /// the moment the news arrives: it turns away the engines that have never been this screen's. The second is
+    /// asked again when the screen takes the news in, because the news travelled - and while it travelled the
+    /// screen may have moved the media, which is exactly what happens when a tune is carried to another engine:
+    /// the engine being stepped off is stopped while it is still the screen's player, its "Stopped" is believed by
+    /// the first question, and by the time that answer reaches the screen the tune is standing on the new engine.
+    /// Taking the first answer alone lost the media from the screen - the tune played on, while the screen said
+    /// nothing was playing and the transport row at the foot of the window went away.
+    /// </remarks>
     private bool PlaysHere(object? sender)
     {
       return ReferenceEquals(sender, _player);
@@ -2863,8 +2903,11 @@ namespace MediaPortal.Frontend.ViewModels
     {
       if (!PlaysHere(sender))
         return;
+      IVideoPlayer? spoke = sender as IVideoPlayer;
       _marshal(delegate
       {
+        if (!PlaysHere(spoke))
+          return;
         DescribeState(args.NewState, null);
         // A media names its own tracks when it starts, and an engine that was not told them yet reports none, so
         // the moment to ask is when it reached "Playing" - not on the position events, which come several a second.
@@ -2899,8 +2942,12 @@ namespace MediaPortal.Frontend.ViewModels
 
       long resume = resumedToMs;
       int percent = resumedPercent;
+      IVideoPlayer? spoke = sender as IVideoPlayer;
       _marshal(delegate
       {
+        if (!PlaysHere(spoke))
+          return;
+
         if (resume > 0)
           // Said out loud because a film that starts twelve minutes in looks like a broken player unless the
           // screen says that was on purpose.
@@ -2934,8 +2981,12 @@ namespace MediaPortal.Frontend.ViewModels
     {
       if (!PlaysHere(sender))
         return;
+      IVideoPlayer? spoke = sender as IVideoPlayer;
       _marshal(delegate
       {
+        if (!PlaysHere(spoke))
+          return;
+
         _stateText = "Failed";
         _stateGlyph = "Notification/error";
         _isPlaying = false;
@@ -2955,8 +3006,14 @@ namespace MediaPortal.Frontend.ViewModels
     {
       if (!PlaysHere(sender))
         return;
+      IVideoPlayer? spoke = sender as IVideoPlayer;
       _marshal(delegate
       {
+        // A media that has left this screen finished somewhere else; saying so here would report the title the
+        // screen is showing now as watched to its end, and hand the queue a tune it was never asked about.
+        if (!PlaysHere(spoke))
+          return;
+
         // The engine also moves to Ended, so the state text arrives through the state event; what this adds is
         // the position of the very end, because a bar that stops short of the end reads as a stalled player.
         _statusLine = "Finished";

@@ -156,10 +156,8 @@ namespace MediaPortal.Frontend.Player
     }
 
     /// <summary>
-    /// Writes the front end's own volume into the mixer rows of this process and takes their mute off.
+    /// Opens the mixer rows of this process: mute off, and a row that had been stood at nought put back to full.
     /// </summary>
-    /// <param name="volumePercent">What the front end believes it plays at, 0 to 100. Zero is answered with
-    /// "then silence is what was asked for" and no write at all.</param>
     /// <param name="log">Where to say what was moved, if anywhere.</param>
     /// <returns>How many rows were moved.</returns>
     /// <remarks>
@@ -167,20 +165,27 @@ namespace MediaPortal.Frontend.Player
     /// away however the front end is set - that is the row this method corrects, and the need was measured: a
     /// machine whose row stood at 9 % and muted played with real peaks and was heard as nothing.
     /// <para>
-    /// A row that is neither mute nor silent is left exactly as it is, even when it disagrees with the front end's
-    /// own number. It used to be dragged to the front end's number on the reasoning that one number should mean
-    /// one thing; that turned out to overrule the viewer. Every title and every resume asked the row again, so a
-    /// loudness the viewer had set came back to the front end's number at the next tune, which is the opposite of
-    /// a setting. What is written now is only what could not be heard otherwise. What is never touched is anybody
-    /// else's row.
+    /// A row that is neither mute nor silent is left exactly as it is. It used to be dragged to the front end's
+    /// own number on the reasoning that one number should mean one thing; that turned out to overrule the viewer.
+    /// Every title and every resume asked the row again, so a loudness the viewer had set came back to the front
+    /// end's number at the next tune, which is the opposite of a setting.
+    /// </para>
+    /// <para>
+    /// <b>Why full rather than the front end's number, since the row is written anyway.</b> The row belongs to the
+    /// audio output, not to the front end, and a front end with two sound engines has two rows: libVLC's is named
+    /// "VLC media player (LibVLC 3.0.20)", BASS's is named after the process. Writing the front end's loudness
+    /// into the row that one engine happens to have opened makes that engine play behind two volumes - its own
+    /// and the row's - while the other engine plays behind one, which a viewer hears as the sound jumping when
+    /// they move the tune to the other engine. So the row is only ever opened, never used as a control: the
+    /// engine holds the loudness, one number, one layer. What is never touched is anybody else's row.
     /// </para>
     /// </remarks>
-    public static int WriteOwnVolume(int volumePercent, Action<string>? log = null)
+    public static int OpenOwnRows(Action<string>? log = null)
     {
-      if (!Supported || volumePercent <= 0)
+      if (!Supported)
         return 0;
 
-      float wanted = Math.Clamp(volumePercent, 0, 100) / 100f;
+      const float wanted = 1.0f; // opened, not turned down: see the remarks
       int changed = 0;
       try
       {
@@ -220,9 +225,8 @@ namespace MediaPortal.Frontend.Player
               row.SetMasterVolume(wanted, IntPtr.Zero);
               row.SetMute(false, IntPtr.Zero);
               changed++;
-              log?.Invoke($"audio session on {id} set to {volumePercent}%" +
-                          (muted ? " and unmuted" : "") + $" (was {now * 100f:0}%" +
-                          (muted ? ", muted" : "") + ").");
+              log?.Invoke($"audio session on {id} opened to 100%" +
+                          $" (was {now * 100f:0}%" + (muted ? ", muted" : "") + ").");
             }
             catch (COMException)
             {
@@ -244,10 +248,8 @@ namespace MediaPortal.Frontend.Player
     private static int _lifting;
 
     /// <summary>
-    /// Writes the front end's volume into its mixer rows once they exist, off the calling thread.
+    /// Opens this process's mixer rows once they exist, off the calling thread.
     /// </summary>
-    /// <param name="volumePercent">Asked for at the moment of each look, so a volume changed while waiting is
-    /// waited with.</param>
     /// <param name="looks">How often to look before giving up - the row is normally there at the first look, and
     /// a machine that never answers should stop being asked.</param>
     /// <param name="pauseMs">How long between looks.</param>
@@ -256,9 +258,10 @@ namespace MediaPortal.Frontend.Player
     /// Why a wait at all: the row belongs to the audio output, and the audio output is born when the first media
     /// starts, a moment after the front end itself. Writing at startup - where "at the start" would naively put
     /// it - finds nothing to write to, which is exactly how one bad click in the mixer survived every restart
-    /// until now.
+    /// until now. Each engine asks for itself, because each engine opens a row of its own - see
+    /// <see cref="OpenOwnRows"/>.
     /// </remarks>
-    public static void WriteOwnVolumeWhenItAppears(Func<int> volumePercent, int looks = 20,
+    public static void OpenOwnRowsWhenTheyAppear(int looks = 20,
         int pauseMs = 100, Action<string>? log = null)
     {
       if (!Supported || Interlocked.CompareExchange(ref _lifting, 1, 0) != 0)
@@ -272,7 +275,7 @@ namespace MediaPortal.Frontend.Player
           {
             try
             {
-              int moved = WriteOwnVolume(volumePercent(), log);
+              int moved = OpenOwnRows(log);
 
               // A row the mixer is already forgetting is not the row this media is playing on, so it does not
               // end the waiting: measured here, the first row found at the moment a title started was one being
@@ -292,7 +295,7 @@ namespace MediaPortal.Frontend.Player
                   // log has to say what the mixer's own rows were standing at, not be silent about having looked.
                   foreach (Session row in living)
                   {
-                    log?.Invoke("audio row " + row + "; the front end plays at " + volumePercent() + "%.");
+                    log?.Invoke("audio row " + row + "; the loudness is held by the engine, not by this row.");
                   }
                 }
 

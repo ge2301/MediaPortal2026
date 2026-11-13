@@ -19,6 +19,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading;
 using ManagedBass;
 
@@ -1021,6 +1022,17 @@ namespace MediaPortal.Frontend.Player
         _state = next;
       }
       RaiseStateChanged(previous, next);
+
+      // BASS opens a row of its own in the operating system's mixer - a different row from libVLC's, which is
+      // named after the audio output rather than after MediaPortal - so the ask that keeps a machine whose row
+      // was muted from playing silently is made here too, and made the same way: the row is opened, never turned
+      // down, because the loudness belongs to the engine. A viewer who moved the tune from one engine to the
+      // other would hear two layers of volume where the other engine has one. See WindowsAudioSessions.
+      if (next == PlayerState.Playing && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+      {
+        WindowsAudioSessions.OpenOwnRowsWhenTheyAppear(
+            log: line => Console.WriteLine("bass: " + line));
+      }
     }
 
     void RaiseStateChanged(PlayerState previous, PlayerState next)

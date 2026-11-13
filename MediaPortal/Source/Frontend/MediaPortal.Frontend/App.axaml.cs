@@ -271,17 +271,14 @@ namespace MediaPortal.Frontend
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The tune that is playing goes on through the engine it started on - <see
-    /// cref="NowPlayingViewModel.UseSoundEngine"/> says why - and the next one belongs to the new answer. The
-    /// video engine is deliberately not swapped here, and is asked on the video player's own page: the window
-    /// hands its surface to that engine once, and lifting it out from under a live surface is a black rectangle
-    /// rather than a film. Its answer is taken the next time the front end starts, which is what its row says.
-    /// </para>
-    /// <para>
-    /// A different <i>card</i> is the same mechanic with one difference: the tune that is playing has to come
-    /// along, because the card is exactly what the engine being left can no longer reach. It is picked up where
-    /// the viewer stood and opened on the new engine, which costs one re-buffer and is what pressing the row
-    /// asked for.
+    /// The tune that is playing is carried to the answer that was just given, where the viewer stood, so that the
+    /// answer is <i>heard</i> rather than believed: a tune that stayed on the engine being left would be one
+    /// more setting that can only be checked by taking the machine apart. Carrying costs the one re-buffer the
+    /// new engine needs - see <see cref="NowPlayingViewModel.UseSoundEngine(IVideoPlayer?, long)"/> for how the
+    /// standing point is put back. A film is not carried, because it never belonged to the sound engine; the
+    /// video engine is asked on the video player's own page and is taken at the next start, since the window
+    /// hands its surface to one engine once and lifting it out from under a live surface is a black rectangle
+    /// rather than a film.
     /// </para>
     /// <para>
     /// An engine that says no leaves the one already playing in charge and is not asked again in this run; the
@@ -324,9 +321,10 @@ namespace MediaPortal.Frontend
 
       _soundPlayer = built.Player;
       _soundOutput = saved.AudioOutput;
-      // Another engine gets the next tune; another card has to take this tune with it, because the card is
-      // precisely what the engine being left cannot go on reaching. -1 says "carry nothing".
-      _nowPlaying.UseSoundEngine(built.Player, otherEngine ? -1 : standingAtMs);
+      // Either answer means a new engine, and either one takes the tune with it: a viewer who moved the sound
+      // somewhere else wants to hear that it moved, and a tune that stayed behind would be the one thing that
+      // proves nothing about the answer that was just given.
+      _nowPlaying.UseSoundEngine(built.Player, standingAtMs);
       // The bars ask their numbers of whatever plays sound now, not of the engine the run started with.
       _nowPlaying.Spectrum = built.Player as IAudioSpectrumSource;
       string card = (built.Player as BassPlayer)?.OutputDescription ?? "";
@@ -515,10 +513,10 @@ namespace MediaPortal.Frontend
           };
 
           // The bars beside the record ask their numbers of the engine that is playing, through the seam the
-          // reference put between its spectrum and its player. BASS answers that question - it reads the answer
-          // off the channel that is playing, which is the reason it is in this tree at all - while libVLC does
-          // not, so the bars move for a tune played through BASS and stand at their floor for a tune played
-          // through libVLC. Either way the screen asks the same question of the sound engine.
+          // reference put between its spectrum and its player. Each engine answers in its own way: BASS reads the
+          // bands off the channel that is playing (_nowPlaying.Spectrum), while libVLC has a silent second engine
+          // draw its spectrum as a picture and reads that back (_nowPlaying.BandSpectrum). Either engine moves the
+          // bars; the screen asks both questions and draws from whichever is answered.
           _nowPlaying.Spectrum = _soundPlayer as IAudioSpectrumSource;
 
           // The players go with it. Without this the engines and their threads stay behind when the last window

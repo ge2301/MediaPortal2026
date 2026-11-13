@@ -109,9 +109,10 @@ public partial class PlaybackSettingsViewModel : ObservableObject
     if (Shows(GROUP_AUDIO))
     {
       Options.Add(new SkinSettingOption("Sound engine",
-          "Which engine makes the sound. BASS listens to what it plays, which is what the bars beside a tune "
-          + "are drawn from, and opens the codecs its add-ons carry; libVLC plays sound and picture through one "
-          + "engine. The engine that is playing finishes its tune; the next one is played by the answer here.",
+          "Which engine makes the sound. BASS opens the codecs its add-ons carry and reads the bands of its own "
+          + "playback; libVLC plays sound and picture through one engine and has a silent second one draw its "
+          + "bands. Either answer moves the bars. The tune that is playing is carried to the answer over it, "
+          + "where it stands.",
           SoundEngineText, AdvanceSoundEngine, Changed));
 
       Options.Add(new SkinSettingOption("Sound card",

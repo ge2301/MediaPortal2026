@@ -1615,8 +1615,19 @@ namespace MediaPortal.Frontend.Views
       bool playing = playback != null && playback.HasMedia;
       bool standingAtThePlayer = _workflow.Current is Workflow.WorkflowFrame frame
           && frame.StateId == "nowplaying";
-      _playbackBar.IsVisible = playing && !standingAtThePlayer && !_keyboardLayer.IsVisible
-          && !_pointerRest.Resting;
+      bool shown = playing && !standingAtThePlayer && !_keyboardLayer.IsVisible && !_pointerRest.Resting;
+
+      // Said whenever the row decides, not on every chrome tick, because a row that leaves a screen nobody
+      // pressed anything looks like a broken player: the sentence says which of the four answers moved it.
+      if (shown != _playbackBar.IsVisible)
+      {
+        Console.WriteLine("row:      " + (shown ? "in sight" : "out of sight") + " - "
+            + (playing ? "something plays" : "the player holds no media")
+            + (standingAtThePlayer ? ", the player's own screen is in front" : string.Empty)
+            + (_keyboardLayer.IsVisible ? ", the keys are out" : string.Empty)
+            + (_pointerRest.Resting ? ", the pointer rests" : string.Empty));
+        _playbackBar.IsVisible = shown;
+      }
       SizePlaybackBarToScreen();
     }
 

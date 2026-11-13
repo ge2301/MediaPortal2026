@@ -96,7 +96,17 @@ namespace MediaPortal.Frontend.Player
     /// </summary>
     long TimeInMs { get; set; }
 
-    /// <summary>Volume 0-100. Values outside that range are clamped, not refused.</summary>
+    /// <summary>
+    /// Volume 0-100. Values outside that range are clamped, not refused.
+    /// </summary>
+    /// <remarks>
+    /// This is the one place a viewer's loudness lives: an engine multiplies the sound it is playing by this
+    /// number, and the step from one engine to the other carries it over, so that moving a tune between engines
+    /// does not move its volume with it. What an engine must not do is put a second volume under itself - the
+    /// operating system keeps a row per audio output in its mixer, and since each engine opens an output of its
+    /// own, a row turned down by one engine would leave the other playing at a different loudness under the same
+    /// number. Both engines therefore open that row rather than use it; see <c>WindowsAudioSessions</c>.
+    /// </remarks>
     int Volume { get; set; }
 
     /// <summary>Muted, independently of <see cref="Volume"/>.</summary>

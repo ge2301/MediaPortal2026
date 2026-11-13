@@ -1662,13 +1662,13 @@ namespace MediaPortal.Frontend.Player
       // audio output picked - for libVLC that is "VLC media player (LibVLC 3.0.20)", which nobody associates with
       // MediaPortal. Measured on a machine that played without audible sound: this player was correct, its media
       // was decoding, the meter on the session moved (peaks to 0.55 of full scale), and the row stood at 9 % and
-      // muted. So the moment sound is actually playing, the front end puts the volume it was told into its own
-      // rows and takes their mute off, off this thread and only once they exist - see WindowsAudioSessions.
+      // muted. So the moment sound is actually playing, the front end opens its own rows and takes their mute off
+      // - opens them, and never turns them down, because the loudness belongs to the engine and this row belongs
+      // to the audio output, which means the two engines have two rows: see WindowsAudioSessions.
       if (newState == PlayerState.Playing && !_headless &&
           RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
       {
-        WindowsAudioSessions.WriteOwnVolumeWhenItAppears(
-            () => _muted || _volume <= 0 ? 0 : _volume,
+        WindowsAudioSessions.OpenOwnRowsWhenTheyAppear(
             log: line => Console.WriteLine("vlc: " + line));
       }
     }
