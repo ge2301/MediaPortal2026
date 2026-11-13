@@ -46,6 +46,19 @@ namespace MediaPortal.Frontend
   {
     private readonly HomeViewModel _home;
     private readonly IVideoPlayer? _player;
+
+    /// <summary>
+    /// The engine that plays sound, or null when the machine has one engine doing both. Only the spectrum bars
+    /// care which of the two a media arrived on; everything else asks the screen that already knows.
+    /// </summary>
+    private IVideoPlayer? _soundPlayer;
+
+    /// <summary>
+    /// The key of the engine this machine last tried for sound, whether or not it answered. A saved answer naming
+    /// an engine the box cannot run is not worth asking twice: the first refusal is printed and remembered, and
+    /// the row on the settings screen says what really plays.
+    /// </summary>
+    private string? _soundTried;
     private readonly ServerSettings? _settings;
     private readonly string? _settingsPath;
     private readonly bool _serverMayBeChanged;
@@ -159,6 +172,12 @@ namespace MediaPortal.Frontend
     /// a player the home screen does not offer the playback screen at all, rather than offering one that cannot
     /// play.
     /// </param>
+    /// <param name="soundPlayer">
+    /// The engine that plays a tune, while <paramref name="player"/> keeps the film. The two are the same engine
+    /// on a machine that was not given a second one, which is how it has always been. It exists because the
+    /// frequency bars beside a tune can only be drawn by an engine that listens to itself, and nobody should have
+    /// to choose between hearing the film well and seeing the bars move.
+    /// </param>
     /// <param name="settings">
     /// What was saved about the server, offered on the screen that chooses it. <c>null</c> is a first run: the
     /// field starts empty.
@@ -201,13 +220,17 @@ namespace MediaPortal.Frontend
     /// <see cref="FrontendTheme"/> can reproduce, or the colours this front end has always used. <c>null</c> means
     /// nobody said, which is the default palette.
     /// </param>
-    public App(HomeViewModel home, IVideoPlayer? player = null, ServerSettings? settings = null,
+    public App(HomeViewModel home, IVideoPlayer? player = null, IVideoPlayer? soundPlayer = null,
+        ServerSettings? settings = null,
         string? settingsPath = null, bool serverMayBeChanged = true, bool startAtConnectionScreen = false,
         string? playFile = null, int playSeconds = 0, string? shotPath = null, TimeSpan playStart = default,
         string? theme = null)
     {
       _home = home;
-      _player = player;
+      // A machine with one engine is answered with that engine in both hands, whichever of the two it is: the
+      // screen has to be able to play, and whether it is heard as a film or as a tune the screen decides later.
+      _player = player ?? soundPlayer;
+      _soundPlayer = soundPlayer ?? player;
       _settings = settings;
       _settingsPath = settingsPath;
       _serverMayBeChanged = serverMayBeChanged;
@@ -233,6 +256,49 @@ namespace MediaPortal.Frontend
           action();
         }
       };
+    }
+
+    /// <summary>
+    /// Build the engine the viewer just chose for sound and hand it to the playback screen, because an answer here
+    /// is saved the moment it is given and a setting that only works after a restart is a setting that was ignored.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The tune that is playing goes on through the engine it started on - <see
+    /// cref="NowPlayingViewModel.UseSoundEngine"/> says why - and the next one belongs to the new answer. The
+    /// video engine is deliberately not swapped here, and is asked on the video player's own page: the window
+    /// hands its surface to that engine once, and lifting it out from under a live surface is a black rectangle
+    /// rather than a film. Its answer is taken the next time the front end starts, which is what its row says.
+    /// </para>
+    /// <para>
+    /// An engine that says no leaves the one already playing in charge and is not asked again in this run; the
+    /// sentence goes where a person reading the console will see it.
+    /// </para>
+    /// </remarks>
+    void AdoptSoundEngine(Settings.PlaybackSettings saved)
+    {
+      if (_nowPlaying == null)
+        return;
+      PlayerEngine named = PlayerEngines.Resolve(saved.AudioEngine, PlayerEngines.BassKey);
+      if (named.Describes(_soundPlayer)
+          || string.Equals(named.Key, _soundTried, StringComparison.OrdinalIgnoreCase))
+      {
+        return;
+      }
+      _soundTried = named.Key;
+
+      PlayerBuild built = named.Build(new PlayerOptions { AudioOutputId = saved.AudioOutput });
+      if (!built.Succeeded)
+      {
+        Console.WriteLine("audio:    " + named.Title + " said no - " + built.Reason);
+        return;
+      }
+
+      _soundPlayer = built.Player;
+      _nowPlaying.UseSoundEngine(built.Player);
+      // The bars ask their numbers of whatever plays sound now, not of the engine the run started with.
+      _nowPlaying.Spectrum = built.Player as IAudioSpectrumSource;
+      Console.WriteLine("audio:    " + built.EngineDescription);
     }
 
     public override void Initialize()
@@ -323,7 +389,7 @@ namespace MediaPortal.Frontend
         // events onto - the player raises them on its own thread.
         _nowPlaying = _player == null
             ? null
-            : new NowPlayingViewModel(_player, action => Dispatcher.UIThread.Post(action));
+            : new NowPlayingViewModel(_player, action => Dispatcher.UIThread.Post(action), _soundPlayer);
 
         if (_nowPlaying != null)
         {
@@ -334,11 +400,15 @@ namespace MediaPortal.Frontend
           _nowPlaying.Preferences = Settings.PlaybackSettings.Load(null, out _);
 
           // And when an answer is saved, the player adopts the very instance that was saved - the settings
-          // screen's rows and the keys of the playback screen never disagree about the next media.
+          // screen's rows and the keys of the playback screen never disagree about the next media. An engine the
+          // viewer moved to is built here as well, because "saved at once" has to mean the next tune, not the
+          // next start.
           Settings.PlaybackSettings.Changed += delegate (object? sender, EventArgs args)
           {
-            if (_nowPlaying != null && sender is Settings.PlaybackSettings saved)
-              _nowPlaying.Preferences = saved;
+            if (_nowPlaying == null || sender is not Settings.PlaybackSettings saved)
+              return;
+            _nowPlaying.Preferences = saved;
+            AdoptSoundEngine(saved);
           };
           // The media info asks the current server, whoever it is when the key is pressed - the reader reads
           // the home screen's client at call time rather than holding on to one build's copy.
@@ -403,15 +473,20 @@ namespace MediaPortal.Frontend
           };
 
           // The bars beside the record ask their numbers of the engine that is playing, through the seam the
-          // reference put between its spectrum and its player. No engine in this frontend answers that question
-          // yet - libVLC keeps no second stream to count over the way the reference's BASS player does - so this
-          // answers null today and the bars stand at their floor. The day an engine learns to listen to itself,
-          // the wire is already here.
-          _nowPlaying.Spectrum = _player as IAudioSpectrumSource;
+          // reference put between its spectrum and its player. BASS answers that question - it reads the answer
+          // off the channel that is playing, which is the reason it is in this tree at all - while libVLC does
+          // not, so the bars move for a tune played through BASS and stand at their floor for a tune played
+          // through libVLC. Either way the screen asks the same question of the sound engine.
+          _nowPlaying.Spectrum = _soundPlayer as IAudioSpectrumSource;
 
-          // The player goes with it. Without this the engine and its threads stay behind when the last window
-          // closes, which a viewer notices as a process that never goes away.
-          desktop.Exit += delegate { _nowPlaying.Dispose(); };
+          // The players go with it. Without this the engines and their threads stay behind when the last window
+          // closes, which a viewer notices as a process that never goes away; BASS holds its output device for
+          // the whole process, so it is asked back too.
+          desktop.Exit += delegate
+          {
+            _nowPlaying.Dispose();
+            BassPlayer.Shutdown();
+          };
 
           // Watching something is what a media centre is for, and the library only knows about it if somebody says
           // so. The playback screen is the one place that knows a viewing ended; this is the one place that knows
@@ -2034,10 +2109,10 @@ namespace MediaPortal.Frontend
       // /Players: the reference's own plates, in its own order - "General" (E100, the watched-and-finished
       // manners of Media/plugin.xml:385), "Audio Player" (E110, BassPlayer/plugin.xml:75), "Video Player"
       // (E130, VideoPlayer/plugin.xml:56) and "Image Player" (E150, ImagePlayer/plugin.xml:46). Which of this
-      // front end's answers sit behind which plate follows the reference's own filing: the skip length, the
-      // volume and the languages belong to the video player's node, the slideshow to the picture player's,
-      // and what counts as watched to General. The Codecs node is left off because this player is told
-      // nothing about codecs.
+      // front end's answers sit behind which plate follows the reference's own filing: the video engine, the skip
+      // length, the volume and the languages belong to the video player's node, the sound engine and its card to
+      // the audio player's, the slideshow to the picture player's, and what counts as watched to General. The
+      // Codecs node is left off because this player is told nothing about codecs.
       model.AddFolder("Players", "Frontend", string.Empty,
           delegate
           {
@@ -2050,7 +2125,16 @@ namespace MediaPortal.Frontend
                     },
                     "Players_General", "Players_General"),
                 new SettingsSection("Audio Player", "Frontend", string.Empty,
-                    delegate { return new PlaybackView(_nowPlaying); },
+                    delegate
+                    {
+                      // The reference's "Audio Player" plate led to the sound player's own answers
+                      // ([Settings.Players.BASSAudioPlayer], BassPlayer/plugin.xml:75), and so does this one:
+                      // which engine makes the sound and which card it plays to. The volume and mute lines this
+                      // plate used to open belong to the playback screen, which is where a viewer is when they
+                      // need them.
+                      return new PlaybackSettingsView(
+                          new PlaybackSettingsViewModel(null, PlaybackSettingsViewModel.GROUP_AUDIO));
+                    },
                     "Players_AudioPlayer", "Players_AudioPlayer"),
                 new SettingsSection("Video Player", "Frontend", string.Empty,
                     delegate

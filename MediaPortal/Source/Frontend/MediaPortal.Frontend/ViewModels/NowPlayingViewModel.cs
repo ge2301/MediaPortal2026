@@ -67,7 +67,30 @@ namespace MediaPortal.Frontend.ViewModels
   /// </remarks>
   public sealed class NowPlayingViewModel : INotifyPropertyChanged, IDisposable
   {
-    private readonly IVideoPlayer? _player;
+    /// <summary>
+    /// The engine holding the media the screen is showing. Two engines can be in this build - one for sound, one
+    /// for picture - and everything below asks this field which of them it means, because a screen that kept the
+    /// engine of the last media would ask a stopped loudspeaker where the film got to.
+    /// </summary>
+    private IVideoPlayer? _player;
+
+    /// <summary>The engine that makes pictures: the one this class was built with.</summary>
+    private readonly IVideoPlayer? _video;
+
+    /// <summary>
+    /// The engine that gets a tune, or the same instance when the machine has only one. <see cref="Play"/> hands
+    /// a media to one or the other, and <see cref="UseSoundEngine"/> replaces it when the viewer answers a
+    /// different engine under the sound card.
+    /// </summary>
+    private IVideoPlayer? _sound;
+
+    /// <summary>
+    /// Engines this screen listened to and no longer expects a tune from - the engine a viewer stepped off. It
+    /// keeps its ears until the screen is thrown away, because the tune it was left holding is still the media
+    /// the screen shows, and its news is turned away by <see cref="PlaysHere"/> rather than by deafness.
+    /// </summary>
+    private readonly List<IVideoPlayer> _retired = new List<IVideoPlayer>();
+
     private readonly Action<Action> _marshal;
     private bool _disposed;
 
@@ -147,13 +170,25 @@ namespace MediaPortal.Frontend.ViewModels
     /// </summary>
     private static readonly PlaybackTrack SubtitleOff = new PlaybackTrack(TrackKind.Subtitle, -1, "no subtitles");
 
-    /// <param name="player">The player to drive, or null for a screen that has no engine on this machine.</param>
+    /// <param name="player">The engine that makes pictures, or null for a screen that has no engine at all.</param>
     /// <param name="marshal">
     /// How to get work onto the thread the screen lives on. Null runs it where it arrives.
     /// </param>
-    public NowPlayingViewModel(IVideoPlayer? player, Action<Action>? marshal = null)
+    /// <param name="soundPlayer">
+    /// The engine that gets a tune, or null when the machine plays everything through one. It is listened to as
+    /// closely as the first, so that a tune and a film answer with the same screen.
+    /// </param>
+    /// <remarks>
+    /// <paramref name="soundPlayer"/> stands last rather than beside the engine it belongs to, because a screen
+    /// with one engine is the arrangement every caller until now had and every test still writes; putting it in
+    /// the middle would have made two dozen calls mean something else without anybody noticing.
+    /// </remarks>
+    public NowPlayingViewModel(IVideoPlayer? player, Action<Action>? marshal = null,
+        IVideoPlayer? soundPlayer = null)
     {
       _player = player;
+      _video = player;
+      _sound = soundPlayer ?? player;
       _marshal = marshal ?? delegate (Action action) { action(); };
       _title = "Nothing playing";
       _fileName = "Nothing playing";
@@ -165,12 +200,13 @@ namespace MediaPortal.Frontend.ViewModels
       _volume = player?.Volume ?? 100;
       _muted = player?.Muted ?? false;
 
+      // Both engines are listened to and only the one holding the media is believed - see <see cref="PlaysHere"/>.
+      Listen(_video, true);
+      if (!ReferenceEquals(_sound, _video))
+        Listen(_sound, true);
+
       if (player != null)
       {
-        player.StateChanged += OnPlayerEvent;
-        player.PositionChanged += OnPositionChanged;
-        player.Failed += OnPlayerFailed;
-        player.EndOfMedia += OnEndOfMedia;
         // The state the player was built in is not Idle in the way a screen means it, so the first reading comes
         // from the player itself rather than from this class's own guess.
         DescribeState(player.State, null);
@@ -2095,12 +2131,12 @@ namespace MediaPortal.Frontend.ViewModels
     }
 
     /// <summary>
-    /// What the bars beside the record ask their numbers of: the engine that is playing, when it can hand out the
-    /// loudness of the bands the control itself divides the sound into. Null while it cannot - which is every
-    /// engine this frontend has except libVLC, whose own spectrum picture is what the band source reads - and the
+    /// What the bars beside the record ask their numbers of: the engine that plays sound, when it can hand out the
+    /// loudness of the bands the control itself divides the sound into. Null while it cannot - which today means a
+    /// build whose sound comes from an engine that listens to nothing but libVLC's own spectrum picture - and the
     /// bars then stand at their floor with their caps fallen, which is the same answer the reference's control
-    /// gives a player that is not active (Controls/AudioSpectrumAnalyzer.cs:490-493). Set once by the application,
-    /// before any screen is built.
+    /// gives a player that is not active (Controls/AudioSpectrumAnalyzer.cs:490-493). Set by the application,
+    /// before any screen is built and again whenever the viewer moves the sound to another engine.
     /// </summary>
     public IAudioSpectrumSource? Spectrum { get; set; }
 
@@ -2335,6 +2371,31 @@ namespace MediaPortal.Frontend.ViewModels
     {
       if (_disposed)
         return Refuse("this screen is closed.");
+
+      // Which engine gets this media. The shelf the viewer pressed the title in decides, for the same reason it
+      // decides the arrangement of the screen: a tune belongs to the engine that listens to itself, because the
+      // bars beside the tune have nothing to draw from otherwise, while a film belongs to the engine that makes
+      // pictures. The library's own say so about a file cannot be consulted here - it arrives after the media has
+      // started - which is why the shelf's name is the rule and not a convenience.
+      IVideoPlayer? engine = NamesMusic(_runAspect) || NamesMusic(_playingAspect)
+          ? _sound ?? _video
+          : _video;
+      if (engine != null && !ReferenceEquals(engine, _player))
+      {
+        if (_player != null)
+        {
+          // The viewer's loudness belongs to the evening and not to one engine: stepping from a film's sound onto
+          // a tune's must not hand back whatever volume the tune's engine came up with.
+          engine.Volume = _player.Volume;
+          engine.Muted = _player.Muted;
+
+          // And the engine being left has to stop. A film that goes on making sound under a tune is not a picture
+          // quietly forgotten; it is two media at once.
+          _player.Stop();
+        }
+        _player = engine;
+      }
+
       if (_player == null)
         return Refuse("no player on this machine.");
 
@@ -2653,6 +2714,39 @@ namespace MediaPortal.Frontend.ViewModels
           : Refuse(_player.LastFailure ?? "this player hands out no pictures.");
     }
 
+    /// <summary>
+    /// Take the engine that gets the next tune.
+    /// </summary>
+    /// <remarks>
+    /// The media that is playing now stays on the engine it started on. Moving a tune that is halfway through from
+    /// one engine to the other costs a stop, a re-buffer and a position the two engines read differently, all to
+    /// hear the last minute of it through different machinery; the next tune is the engine's from the first
+    /// sample. The engine that was stepped off keeps its ears (see <see cref="_retired"/>) because the tune it is
+    /// left holding is still what the screen shows until the next media arrives.
+    /// </remarks>
+    public void UseSoundEngine(IVideoPlayer? engine)
+    {
+      if (ReferenceEquals(engine, _sound))
+        return;
+
+      IVideoPlayer? left = _sound;
+      _sound = engine ?? _video;
+
+      // The engine that was stepped off is remembered rather than unhooked: the tune it is left holding is still
+      // what the screen shows, and its news is turned away by PlaysHere until the next media arrives.
+      if (left != null && !ReferenceEquals(left, _video) && !ReferenceEquals(left, _sound))
+        _retired.Add(left);
+
+      // An engine handed back to this screen later (bass, libVLC, bass again) is still hooked from its first
+      // tour, so the ears go off and back on rather than merely on - two registrations would move the screen
+      // twice per event.
+      if (_sound != null && !ReferenceEquals(_sound, _video))
+      {
+        Listen(_sound, false);
+        Listen(_sound, true);
+      }
+    }
+
     public void Dispose()
     {
       if (_disposed)
@@ -2662,17 +2756,49 @@ namespace MediaPortal.Frontend.ViewModels
       // carries on over other screens - but nothing may keep a second decoder running for a stage nobody is
       // looking at any more.
       StopWatchingSpectrum();
-      if (_player != null)
+      Listen(_video, false);
+      Listen(_sound, false);
+      foreach (IVideoPlayer engine in _retired)
+        Listen(engine, false);
+    }
+
+    /// <summary>
+    /// Put this screen's ears on an engine, or take them off. Both engines are listened to, because the tune that
+    /// starts after a film has to move the screen just as loudly as the film did; which of them is believed is
+    /// decided when the news arrives, by <see cref="PlaysHere"/>.
+    /// </summary>
+    private void Listen(IVideoPlayer? engine, bool on)
+    {
+      if (engine == null)
+        return;
+      if (on)
       {
-        _player.StateChanged -= OnPlayerEvent;
-        _player.PositionChanged -= OnPositionChanged;
-        _player.Failed -= OnPlayerFailed;
-        _player.EndOfMedia -= OnEndOfMedia;
+        engine.StateChanged += OnPlayerEvent;
+        engine.PositionChanged += OnPositionChanged;
+        engine.Failed += OnPlayerFailed;
+        engine.EndOfMedia += OnEndOfMedia;
+        return;
       }
+      engine.StateChanged -= OnPlayerEvent;
+      engine.PositionChanged -= OnPositionChanged;
+      engine.Failed -= OnPlayerFailed;
+      engine.EndOfMedia -= OnEndOfMedia;
+    }
+
+    /// <summary>
+    /// Whether the engine bringing news is the one holding what the screen shows. The engine a film was left on
+    /// has nothing to say about the tune that plays now, and an answer from it would move a screen that was never
+    /// asked to move.
+    /// </summary>
+    private bool PlaysHere(object? sender)
+    {
+      return ReferenceEquals(sender, _player);
     }
 
     private void OnPlayerEvent(object? sender, PlayerStateChangedEventArgs args)
     {
+      if (!PlaysHere(sender))
+        return;
       _marshal(delegate
       {
         DescribeState(args.NewState, null);
@@ -2688,6 +2814,9 @@ namespace MediaPortal.Frontend.ViewModels
 
     private void OnPositionChanged(object? sender, PlaybackPositionEventArgs args)
     {
+      if (!PlaysHere(sender))
+        return;
+
       // The resume seek, applied the first time an event says how long the media is. Out here rather than inside
       // the marshaller on purpose: the seek is the engine's business and can be issued from the thread the engine
       // is on, while waiting for a UI turn would have the viewer watch the first minutes of a film they had
@@ -2739,6 +2868,8 @@ namespace MediaPortal.Frontend.ViewModels
 
     private void OnPlayerFailed(object? sender, PlayerFailedEventArgs args)
     {
+      if (!PlaysHere(sender))
+        return;
       _marshal(delegate
       {
         _stateText = "Failed";
@@ -2758,6 +2889,8 @@ namespace MediaPortal.Frontend.ViewModels
 
     private void OnEndOfMedia(object? sender, EventArgs args)
     {
+      if (!PlaysHere(sender))
+        return;
       _marshal(delegate
       {
         // The engine also moves to Ended, so the state text arrives through the state event; what this adds is

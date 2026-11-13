@@ -184,14 +184,47 @@ namespace MediaPortal.Frontend
       bool serverMayBeChanged = string.IsNullOrWhiteSpace(serverUrl)
           && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(ServerApiClient.UrlEnvironmentVariable));
 
-      // One player for the whole application, built here so that the reason for its absence is printed where a
-      // human reads it. A machine without libVLC still gets a front end - the library browses, the playback
-      // screen is simply not offered - because not being able to play a film is not a reason to refuse to show
-      // one's music collection.
-      LibVlcPlayer? player;
-      string playerReason;
-      bool havePlayer = LibVlcPlayer.TryCreate(out player, out playerReason);
-      Console.WriteLine(havePlayer ? "player:   " + player!.EngineDescription : "player:   none - " + playerReason);
+      // Two engines, because sound and picture are two questions and a viewer may want a different answer to each:
+      // BASS listens to what it plays, which is what the bars beside a tune are drawn from, while libVLC has always
+      // made the picture. Both are built here so that the reason for an absence is printed where a human reads it,
+      // and so that a step down to one engine is said out loud instead of quietly taken. Which is which is the
+      // viewer's answer in playback.json, kept beside the volume and the languages the player reads there already;
+      // MP2_AUDIO_ENGINE and MP2_VIDEO_ENGINE still override it, for the reason every override here exists - a gate,
+      // a test or a terminal must be able to ask for one engine without rewriting what a real viewer set.
+      PlaybackSettings playback = PlaybackSettings.Load(null, out _);
+      string audioKey = Environment.GetEnvironmentVariable("MP2_AUDIO_ENGINE") ?? playback.AudioEngine;
+      string videoKey = Environment.GetEnvironmentVariable("MP2_VIDEO_ENGINE") ?? playback.VideoEngine;
+
+      PlayerBuild video = PlayerEngines.Resolve(videoKey).Build();
+      if (!video.Succeeded)
+      {
+        if (!string.Equals(videoKey, PlayerEngines.LibVlcKey, StringComparison.OrdinalIgnoreCase))
+        {
+          Console.WriteLine("video:    " + videoKey + " said no - " + video.Reason);
+          video = PlayerEngines.Resolve(PlayerEngines.LibVlcKey).Build();
+        }
+      }
+
+      PlayerBuild sound = string.Equals(audioKey, videoKey, StringComparison.OrdinalIgnoreCase)
+          ? video
+          : PlayerEngines.Resolve(audioKey).Build(new PlayerOptions { AudioOutputId = playback.AudioOutput });
+      if (!sound.Succeeded && !ReferenceEquals(sound.Player, video.Player))
+      {
+        Console.WriteLine("audio:    " + audioKey + " said no - " + sound.Reason);
+        sound = video;
+      }
+
+      string playerReason = (video.Succeeded ? "" : video.Reason)
+          + (sound.Succeeded || ReferenceEquals(sound.Player, video.Player) ? "" : " / " + sound.Reason);
+      bool havePlayer = video.Succeeded || sound.Succeeded;
+      Console.WriteLine(video.Succeeded
+          ? "video:    " + video.EngineDescription
+          : "video:    none - " + video.Reason);
+      Console.WriteLine(!sound.Succeeded
+          ? "audio:    none - " + sound.Reason
+          : ReferenceEquals(sound.Player, video.Player)
+              ? "audio:    the same engine plays both"
+              : "audio:    " + sound.EngineDescription);
 
       // --play is checked here, where an answer can still be a sentence on a terminal, rather than in a window
       // that opens to say the same thing. A file that is not there and a machine with no engine are the two ways
@@ -273,7 +306,7 @@ namespace MediaPortal.Frontend
         // of an hour, watched quietly in the background rather than waited on in front of the screen.
         HomeViewModel home = new HomeViewModel(client, pictures);
         HomeInfoWalls.Attach(home);
-        return new App(home, player, settings, null,
+        return new App(home, video.Player, sound.Player, settings, null,
             serverMayBeChanged, serverMayBeChanged && !settings.HasUsableUrl, playFile, playSeconds, shotPath,
             playStart, theme);
       });
@@ -439,28 +472,55 @@ namespace MediaPortal.Frontend
     }
 
     /// <summary>
-    /// Builds a player the way the application builds it and prints what came of it, then throws it away again.
+    /// Builds the engines the way the application builds them and prints what came of it, then throws them away
+    /// again.
     /// </summary>
     /// <remarks>
-    /// Headless on purpose: <c>--check</c> is meant to work over a plain ssh session with no display, and the
-    /// answer to "can this machine play at all" does not depend on a window. A missing player is printed and
-    /// changes nothing about the exit code - a media centre without libVLC still browses its library, and the
-    /// gate is about the front end working, not about one optional library being installed.
+    /// <para>
+    /// The picture engine is asked headless on purpose: <c>--check</c> is meant to work over a plain ssh session
+    /// with no display, and the answer to "can this machine play at all" should not depend on a window.
+    /// </para>
+    /// <para>
+    /// The sound engine is asked plainly, because it has no silent device of its own to be asked for: on a machine
+    /// without a sound card it answers with the sentence the sound card refused with, which is a fact worth reading
+    /// on a media centre that is supposed to make noise.
+    /// </para>
+    /// <para>
+    /// A missing engine is printed and changes nothing about the exit code - a media centre without an engine still
+    /// browses its library, and the gate is about the front end working, not about one optional library being
+    /// installed.
+    /// </para>
     /// </remarks>
     private static void ReportPlayer()
     {
-      LibVlcPlayer? player;
-      string reason;
-      if (!LibVlcPlayer.TryCreate(out player, out reason, new PlayerOptions { Headless = true }))
+      foreach (PlayerEngine engine in PlayerEngines.All)
       {
-        Console.WriteLine("player:   none - " + reason);
-        return;
+        if (!engine.Built)
+        {
+          Console.WriteLine("player:   " + engine.Title + " - " + engine.Refusal);
+          continue;
+        }
+
+        // Only the engine that can be silent is asked to be silent.
+        PlayerOptions options = new PlayerOptions { Headless = engine.Key == PlayerEngines.LibVlcKey };
+        PlayerBuild built = engine.Build(options);
+        Console.WriteLine("player:   " + (built.Succeeded
+            ? built.EngineDescription
+            : engine.Title + " none - " + built.Reason));
+
+        if (!built.Succeeded || engine.Key != PlayerEngines.BassKey)
+          continue;
+
+        // What BASS can actually do is two questions a person asks before choosing it: which files, and which
+        // sound card. Both are answered from the library rather than from a list kept here.
+        Console.WriteLine("codecs:   " + BassPlugins.Describe() + " - "
+            + string.Join(" ", BassPlayer.KnownFileTypes()));
+        Console.WriteLine("outputs:  " + string.Join(" | ", BassPlayer.Outputs()));
       }
 
-      using (player!)
-      {
-        Console.WriteLine("player:   " + player!.EngineDescription);
-      }
+      // The sound engine holds its device for the process, and a check that leaves it held would be a check that
+      // stops the next one from asking.
+      BassPlayer.Shutdown();
     }
   }
 }

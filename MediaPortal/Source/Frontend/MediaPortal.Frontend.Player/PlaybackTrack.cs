@@ -173,6 +173,17 @@ namespace MediaPortal.Frontend.Player
     public IList<string> ExtraArguments { get; } = new List<string>();
 
     /// <summary>
+    /// The sound output to play through, named the way the engine names it. Null asks for whatever the machine
+    /// settled on.
+    /// </summary>
+    /// <remarks>
+    /// It is called an id and not a number because every engine counts its own outputs differently: libVLC has
+    /// one answer (the system's) and ignores this, while BASS lists the machine's devices by name and picks the
+    /// row a viewer chose in the settings. A name that nothing answers to is reported, not swallowed.
+    /// </remarks>
+    public string? AudioOutputId { get; set; }
+
+    /// <summary>
     /// Ask libVLC for no video window and no audio device. This is what makes a player usable on a host with
     /// neither - a container, a service, or a test - and it is the only way the decoding half of the engine can
     /// be measured without somebody sitting in front of a screen.

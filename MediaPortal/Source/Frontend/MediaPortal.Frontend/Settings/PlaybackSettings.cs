@@ -30,10 +30,13 @@ namespace MediaPortal.Frontend.Settings;
 /// <remarks>
 /// <para>
 /// The reference kept these under its playback settings; this class carries the ones this front end can
-/// actually honour - the player behind it is libVLC, so the reference's DirectShow-only answers (audio
-/// renderer device, hardware MPEG2, DVD paths) are not repeated here as promises nobody can keep, and the
-/// reference's subtitle appearance (font, size, colour) waits until the renderer shows subtitles through
-/// this front end rather than the engine's overlay.
+/// actually honour. Which engine sits behind it is the viewer's answer (<see cref="AudioEngine"/> and
+/// <see cref="VideoEngine"/>), and it decides what the other answers can reach: the sound card
+/// (<see cref="AudioOutput"/>) is the reference's "audio renderer device" question, which the BASS engine
+/// answers and the libVLC build here does not. The reference's DirectShow-only promises (hardware MPEG2,
+/// DVD paths) are not repeated here as promises nobody can keep, and the reference's subtitle appearance
+/// (font, size, colour) waits until the renderer shows subtitles through this front end rather than the
+/// engine's overlay.
 /// </para>
 /// <para>
 /// One JSON file beside <c>client.json</c>, overridable with <c>MP2_PLAYBACK_FILE</c> for the same reason
@@ -158,6 +161,34 @@ public sealed class PlaybackSettings
   /// </summary>
   [JsonPropertyName("closePlayerWhenFinished")]
   public bool ClosePlayerWhenFinished { get; set; } = true;
+
+  /// <summary>
+  /// Which engine makes the sound: a key of <see cref="Player.PlayerEngines"/>. BASS is the shipped answer
+  /// because it listens to what it plays - the bars beside a tune are drawn from the samples it hands over -
+  /// and because its add-ons open the codecs libVLC was built without here. An answer the register does not
+  /// know, or an engine that is not on the box, is not a mistake to punish: the front end says so out loud
+  /// at start-up and plays through the one that answered.
+  /// </summary>
+  [JsonPropertyName("audioEngine")]
+  public string AudioEngine { get; set; } = Player.PlayerEngines.BassKey;
+
+  /// <summary>
+  /// Which engine plays video, asked on the video player's own page. libVLC is the shipped answer and the only
+  /// one that plays video today; the register already knows the key of the mpv engine that is planned, and a
+  /// file naming it is answered with a sentence rather than a black screen. Unlike the sound engine, this
+  /// answer is taken at the next start: the window hands its surface to one engine once.
+  /// </summary>
+  [JsonPropertyName("videoEngine")]
+  public string VideoEngine { get; set; } = Player.PlayerEngines.LibVlcKey;
+
+  /// <summary>
+  /// The sound card the BASS engine is told to use, by the name the engine itself gives it - the same name
+  /// the row under it walks. Empty means the engine's own answer, which is the card the operating system
+  /// picked. A name that no longer exists (a card that was unplugged, a file edited by hand) sends the
+  /// engine to its own default and says which card it landed on.
+  /// </summary>
+  [JsonPropertyName("audioOutput")]
+  public string AudioOutput { get; set; } = "";
 
   /// <summary>The answers the watched-mark row walks. The reference offered the whole stretch of nought
   /// to a hundred as a number; a remote walks a ladder, and the file still takes any whole per cent.</summary>

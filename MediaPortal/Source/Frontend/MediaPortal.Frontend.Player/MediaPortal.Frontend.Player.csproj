@@ -18,10 +18,15 @@
         without touching a single screen.
       - libVLC itself is NOT vendored and NOT downloaded. It is found at run time (see NativeLibraryLocator),
         and a player that cannot find it says so in a sentence instead of throwing a DllNotFoundException.
+      - BASS is the second engine (see NativeBass and BassPlayer), and it is the audio half of the pair: it
+        decodes and measures sound and makes no picture. Its managed wrapper is the ManagedBass package, its
+        native library is fetched by scripts/ci/get-bass.ps1 into the ignored libs/bass/ - Un4seen Developments
+        does not let anyone redistribute it - and no ManagedBass type crosses the seam either, for the same
+        reason as above.
 
-    GenerateAssemblyInfo is off because VersionInfo.cs is linked in, the way the front end and the API
-    assembly do it, so the player reports the product version rather than 1.0.0.0.
-  -->
+      GenerateAssemblyInfo is off because VersionInfo.cs is linked in, the way the front end and the API
+      assembly do it, so the player reports the product version rather than 1.0.0.0.
+    -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>MediaPortal.Frontend.Player</RootNamespace>
@@ -42,6 +47,14 @@
       of it is compiled into or shipped inside an MP2 assembly.
     -->
     <PackageReference Include="LibVLCSharp" Version="3.10.2" />
+
+    <!--
+      ManagedBass, MIT, and - deliberately - the managed half only: the package carries no native library,
+      because the publisher does not permit redistribution. NativeBass finds the real thing at run time, so an
+      assembly that merely references this package still loads and still runs on a machine that never fetched
+      BASS. Version 4.0.2 is the latest stable; it wraps BASS 2.4.
+    -->
+    <PackageReference Include="ManagedBass" Version="4.0.2" />
   </ItemGroup>
 
 </Project>

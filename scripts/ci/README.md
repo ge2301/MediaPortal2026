@@ -2043,3 +2043,37 @@ parameter, and the run died with "cannot convert PSCustomObject to SwitchParamet
 never bothered anybody until the switch existed. The loop is `$mediaStream` now. `trap { Write-Host $_.InvocationInfo.ScriptLineNumber }`
 copied into a scratch clone of a script is the fastest way to find where a `-File` run actually stopped, because the
 error PowerShell prints names the script, not the statement.
+
+
+## The BASS runtimes are fetched, never committed: `get-bass.ps1`
+
+The front end can play audio through BASS as well as through libVLC, and BASS is the one that measures its own
+output - which is what the spectrum needs. ManagedBass on NuGet is deliberately the managed wrapper alone (Un4seen
+Developments does not let anyone redistribute its libraries), and the community package `BASS.Native` that does
+carry binaries is stale and has no ARM at all. So the libraries come from the publisher's own site, into
+`libs\bass\`, which `.gitignore` keeps out of the tree:
+
+    .\get-bass.ps1                     # every add-on, every platform
+    .\get-bass.ps1 -Platform win -Only bass,bass_aac,bass_opus
+
+Folders are runtimes by platform (`win-x64`, `win-x86`, `linux-x64`, `linux-arm64`, `linux-arm`, `linux-x86`,
+`osx`), `libs\bass\.archives\` holds the downloaded archives so a second run needs no network, `.version` says
+which BASS is in place, and `-Force` re-fetches. A file that is already there is left alone, because a developer
+may have dropped a self-built library next to it; `-WhatIf` promises to touch nothing and therefore does not
+download either.
+
+The archive law was read off the archives rather than remembered: a Windows archive puts `bass.dll` at its root
+and the x64 one under `x64\`, a Linux archive carries `libs\aarch64|armhf|x86|x86_64\`, and the macOS archive is
+one `libbass.dylib` whose fat header names x86_64, i386 **and** arm64 - so the single file serves both Apples.
+Three findings are the publisher's, not ours, and the script says them out loud instead of failing quietly: WMA is
+shipped for Windows only, AAC and ALAC not for macOS, and there is **no Windows/ARM64 build at all** on the site -
+Windows on ARM runs the x64 library under emulation, which is why `NativeBass` falls back from `win-arm64` to
+`win-x64` rather than giving up. Note also that the macOS add-ons of the codecs that live in `files\z\2\` on the
+site (Musepack, Speex, TTA) live in `files\z\2\` too; guessing `files\bass_mpc24-osx.zip` returns a 404 and the
+script exits 1 on exactly that.
+
+Two traps, both already written down above and both met again here. A helper function that prints its own progress
+returns *its log plus its result*, so `Get-Archive` hands back an array where `ZipFile::OpenRead` wanted a path -
+the functions here return rows and the loop does the printing. And `ZipArchiveEntry.ExtractToFile` is an extension
+method: PowerShell 7 found it, Windows PowerShell 5.1 resolved `ZipFile` without loading the extension assembly
+and reported "no method ExtractToFile", so the copy is done with two streams, which needs no extension at all.

@@ -6,3 +6,6 @@
 /build/
 # crash and hang dumps from dotnet test --blame
 TestResults/
+# the native BASS runtime, fetched by scripts/ci/get-bass.ps1 - Un4seen Developments does not allow
+# redistributing it, so the libraries are never committed, only downloaded by whoever wants the BASS engine
+/libs/
