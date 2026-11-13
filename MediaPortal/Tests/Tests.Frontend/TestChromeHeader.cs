@@ -275,8 +275,24 @@ namespace Tests.Frontend
     /// </summary>
     private static List<Avalonia.Controls.Shapes.Path> GlyphsOnTheScreen(ShellWindow window)
     {
-      return window.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Path>()
+      return HeadLineOnTheScreen(window).GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Path>()
           .Where(p => p.Data != null && p.IsEffectivelyVisible && p.Bounds.Width > 20).ToList();
+    }
+
+    /// <summary>
+    /// The head line itself - the ContentControl (named "ChromeHeader", Views/ShellWindow.cs) the worn skin's
+    /// chrome template is hung into. The bar's pictures are looked for inside it rather than over the whole
+    /// window, because the window carries marks of its own: the pointer's way out stands at the top LEFT-hand
+    /// corner of every screen but the home, and those are paths of the very same size. Measured from the window
+    /// they would be taken for the bar's, and a law about the right end of the line would then be answered by a
+    /// mark that is standing at its left - which is not the line's doing but the measuring's.
+    /// </summary>
+    private static Control HeadLineOnTheScreen(ShellWindow window)
+    {
+      Control? line = window.GetVisualDescendants().OfType<Avalonia.Controls.ContentControl>()
+          .FirstOrDefault(c => c.Name == "ChromeHeader");
+      Assert.That(line, Is.Not.Null, "the head line is not on the screen at all");
+      return line!;
     }
 
     [Test]

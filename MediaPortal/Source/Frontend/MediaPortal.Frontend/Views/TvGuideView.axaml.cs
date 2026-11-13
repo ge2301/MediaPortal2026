@@ -730,14 +730,19 @@ namespace MediaPortal.Frontend.Views
     }
 
     /// <summary>
-    /// Places a row's channel picture, or - when there is none to place, because it has not arrived or because this
-    /// station has none - puts the channel's name in its place instead. One of the two is ever visible, never both
-    /// and never neither, which is what the reference's two bindings around one image added up to.
+    /// Places a row's channel picture, or - when there is none to place, because it has not arrived, because this
+    /// station has none, or because what the machine answered holds no picture - puts the channel's name in its
+    /// place instead. One of the two is ever visible, never both and never neither, which is what the reference's
+    /// two bindings around one image added up to.
     /// </summary>
     private static void ShowPicture(LogoCell cell, byte[]? bytes)
     {
-      bool have = bytes != null && bytes.Length > 0;
+      // What the bytes HOLD, not whether they are there: a station whose logo came back as a login page, a
+      // half-written file or an empty reply is a station without a picture, and drawing nothing where its icon
+      // should stand while its name is hidden away for a picture that never appears is the hole this cell was
+      // built to close. So the name only steps aside once there is really something to draw in its place.
       cell.Picture.Source = PictureOf(bytes);
+      bool have = cell.Picture.Source != null;
       cell.Picture.IsVisible = have;
       cell.InsteadOfPicture.IsVisible = !have;
       if (cell.BesidePicture != null)

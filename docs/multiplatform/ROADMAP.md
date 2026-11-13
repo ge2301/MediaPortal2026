@@ -6755,18 +6755,66 @@ measure: a skin folder that has been collected is not a skin folder, and answeri
 *none* strands a television whose viewer deleted a folder.  `Installed()` now says so through `SkinsFolderProblem` and
 wears the faces the assembly carries.
 
-**13 of 1654 stand after that, and they are named rather than counted.**  Six of them are pictures, and they are the
-next piece of work: `TestChromeHeader.ThePicturesOfTheBarStandOnOneLine` (two of the head line's marks come to rest at
-thirty units, the third at thirty-four, so one plate does not hug its art) and `.WhatTheServerIsDoingIsSaidInPictures
-AndNeverInWords` (the server's mark stands at the left edge of a 1280-wide window rather than right of the middle),
-`TestSkinHomeFiles.StandingOnACornerButtonLightsItsMarkAndNotItsPlate` (the mark of a stood-on corner button is not
-found at all), `TestTvChannelLogos` twice (`.ARowWithoutAPicturePutsItsNameWhereThePictureWouldStand` and
-`.TheScreenDrawsThePictureBesideTheRowItBelongsTo`), and `TestArtwork.ATitleOnTheScreenIsAskedForItsPictureOnce`.  Two
-are the household dialog: `.TheDialogStandsOnTheSkinsFrameRatherThanOnACollapsedBar` and `.BackspaceTakesTheNewest
-NumberBack`.  Four are the shelf: `TestMediaBrowser`'s `.BackLetsTheScreenGoEvenWhenEveryLayerIsUpAtOnce`,
-`.PickingAFilterOnAWallThatRecyclesStandsTheCaretOnATileInsideTheView`, `.TheWashBehindTheDetailsDarkensTheCornerThe
-FanartShinesThrough` and `.TheActorsOfAReadingAreLinksIntoTheirWallAndADirectorStandsStill`, and one is the wall's own
-walking, `TestNereusWallNavigation.RightFromTheHeadOfTheMenuReachesTheRowOfButtons` — a focused button that is not
-among the four the wall counts as its top row.  Every one of these is a law the front end once kept and no longer
-does, or a measure that has drifted; none of them is the machine's state, which is what the run had been drowning in.
+**Six of the thirteen were pictures, and four separate things turned out to be wrong about them - only one of
+which was the front end drawing a picture badly.**
 
+Two were the *measuring*.  `TestChromeHeader.ThePicturesOfTheBarStandOnOneLine` and
+`.WhatTheServerIsDoingIsSaidInPicturesAndNeverInWords` asked the whole window for shapes with a
+geometry behind them, and the window carries shapes of its own now: the pointer's way out - the two
+round marks a hand on a desk walks back with - stands at the top LEFT-hand corner of every screen
+but the home (`Views/ShellWindow.cs`).  So a law about the right end of the head line was being
+answered by a mark standing at its left, and a law about the bar's marks standing on one line was
+answered by a mark that is not on the bar at all (its middle sits twenty lines up, the bar's come to
+rest at twenty-two and two thirds).  Both tests now look inside the head line - the ContentControl
+the worn skin's chrome template is hung into, named "ChromeHeader" - which is the line the law is
+about.
+
+One was the face breaking its own law.  Every rule in this skin that dresses `:pointerover` stands
+behind the window's "the pointer is about" gate (`Window:not(.pointer-resting)`), in `styles.xaml`,
+in the other face's styles and in every view's own: a pointer that was left standing on a control
+and then put away to rest must not go on claiming that somebody stands at it, while a ring has to
+stay lit whatever the pointer does.  The corner buttons' glow was the one rule written without it,
+as a single `:focus, :pointerover` selector, so on the worn face a parked pointer kept a corner mark
+lit forever.  `styles.xaml` writes the ring's half and the pointer's half as two rules now, as the
+rest of the face does, and both halves carry the same white glow so neither way of standing on a
+mark looks broken to whichever viewer arrived second.
+
+The last two were a hole and a stand-in.  `TvGuideView.ShowPicture` decided whether a row has a
+picture by whether the TV machine had answered *anything*, rather than by whether the answer holds a
+picture - so the station whose logo came back as a login page, a half-written file or a refusal hid
+its name in the label that is only supposed to stand there when no icon exists, and drew nothing at
+all.  That is precisely the hole the reference's `image` with its `ChannelLogoFallbackLabel` closed
+(`SlimTvStyles.xaml:1432-1478`), and it decides on the decoded picture now.  The fixture's stand-in,
+meanwhile, had never once been a picture: `PictureBackend` answered every logo with twenty-seven
+bytes of ASCII, which the decoder - the same one every other screen of this front end uses, added to
+the guide after those two tests were written - answers with "no picture".  They hand out a real
+four-by-three PNG now, so that a row waiting for its icon is a row that gets one.
+
+**Nine of 1654 stand, and five of them are the ones this list already knew.**  Two of the thirteen came back
+green without being touched -
+`TestMediaBrowser.TheWashBehindTheDetailsDarkensTheCornerTheFanartShinesThrough` and the household
+dialog's `.BackspaceTakesTheNewestNumberBack` - which is the useful kind of surprise and the
+uncomfortable kind of evidence at once: an answer that changes because a neighbour changed is not
+the front end answering and not the test law answering, but the run's order.  Three took their place,
+and all three pass when run alone.  `TestSettingsScreen.TheSettingsScreenOpensAsAListOfItsThemes`
+and the keyboard dialog's `OkOnTheKeyboardButtonOpensTheKeysAndNeverPlaysTheRow` both end the same
+way - `InvalidOperationException: The calling thread cannot access this object because a different
+thread owns it` - which is not a measure drifting but a thread touching a control that another
+thread made, under the load of a run where the completions land in a different order; that one is a
+product bug and it is where this list goes next.
+`TestMediaBrowser.AStackStandsItsCoversPastBothEdgesOfThePicture` misses its right edge by eight
+lines of a twelve-hundred-line picture (1252 of 1260, with the leftmost cover standing eleven
+hundred lines off screen to the left), and
+`TestBrowserArtwork.ATitleOnTheScreenIsAskedForItsPictureOnce` asks the machine twice where it asked
+once - both of them answers that depend on who stood there before.
+
+What is left is therefore two questions of ownership, two of order, and five walls.  Ownership: which thread
+owns what (`TheSettingsScreenOpensAsAListOfItsThemes`,
+`OkOnTheKeyboardButtonOpensTheKeysAndNeverPlaysTheRow`).  Order: why a run's order decides an answer
+(`AStackStandsItsCoversPastBothEdgesOfThePicture`, `ATitleOnTheScreenIsAskedForItsPictureOnce`).
+The walls: the shelf's three - `.BackLetsTheScreenGoEvenWhenEveryLayerIsUpAtOnce`,
+`.PickingAFilterOnAWallThatRecyclesStandsTheCaretOnATileInsideTheView` and
+`.TheActorsOfAReadingAreLinksIntoTheirWallAndADirectorStandsStill` - the household dialog's
+`.TheDialogStandsOnTheSkinsFrameRatherThanOnACollapsedBar`, and the wall's own walking,
+`TestNereusWallNavigation.RightFromTheHeadOfTheMenuReachesTheRowOfButtons` - a focused button that
+is not among the four the wall counts as its top row.

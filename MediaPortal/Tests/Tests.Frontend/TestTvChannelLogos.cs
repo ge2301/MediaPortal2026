@@ -148,7 +148,15 @@ namespace Tests.Frontend
       }
 
       /// <summary>Not a real picture: the headless toolkit answers every bytes with a one-pixel stub anyway.</summary>
-      internal static readonly byte[] Picture = Encoding.ASCII.GetBytes("PNG\0a channel's own picture");
+      /// <summary>
+      /// What every picture answer carries: a real four-by-three PNG, ten lines of colour. It has to BE a picture,
+      /// because a row hands what the machine answered to the same decoder every other screen of this front end
+      /// uses, and a stand-in that holds no picture is answered with no picture - which is the right answer for a
+      /// screen (a login page is not an icon) and would leave these two tests measuring nothing at all.
+      /// </summary>
+      internal static readonly byte[] Picture = Convert.FromBase64String(
+          "iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAYAAAC09K7GAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAA"
+          + "A7DAcdvqGQAAAAQSURBVBhXY5CrOPGfgSQAAHFYAl60iafoAAAAAElFTkSuQmCC");
 
       private static Task<HttpResponseMessage> Answer(HttpRequestMessage request, HttpStatusCode code,
           HttpContent content)
