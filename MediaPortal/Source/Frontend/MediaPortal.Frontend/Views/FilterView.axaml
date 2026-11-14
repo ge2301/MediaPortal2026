@@ -144,7 +144,8 @@
           <Grid Classes="nereus-row-rest" ColumnDefinitions="Auto,5*,1.4*" ColumnSpacing="20" MinWidth="700"
                 Margin="30,4">
             <TextBlock Grid.Column="1" Text="{Binding Value}" TextTrimming="CharacterEllipsis"/>
-            <TextBlock Grid.Column="2" Text="{Binding CountText}" TextTrimming="CharacterEllipsis" Opacity="0.7"/>
+            <TextBlock Grid.Column="2" Text="{Binding CountText}" TextTrimming="CharacterEllipsis" Opacity="0.7"
+                       HorizontalAlignment="Right"/>
           </Grid>
           <Grid Classes="nereus-row-focus" ColumnDefinitions="Auto,1*" ColumnSpacing="20" MinWidth="700"
                 MinHeight="89" Margin="15,4,30,4">
