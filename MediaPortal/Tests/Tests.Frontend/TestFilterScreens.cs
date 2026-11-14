@@ -23,6 +23,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Headless.NUnit;
@@ -748,6 +749,74 @@ namespace Tests.Frontend
       Assert.That(opened, Has.Count.EqualTo(1), "OK opens the titles that carry the stood tile");
       Assert.That(opened[0].By, Is.EqualTo("year"));
       Assert.That(opened[0].Value, Is.EqualTo("2009"));
+
+      window.Close();
+    }
+
+    /// <summary>
+    /// A value pointed at is opened by the pointer, not merely selected: the wall answered a remote and not a
+    /// hand until the tap was heard where every other wall of this front end hears it - on the bubble, after the
+    /// press has settled into a selection.  A tunnel tap fires before the ListBox has marked its item selected, so
+    /// the first press of a session moved the caret and opened nothing (viewer's word 2026-11-14: the filter
+    /// values "do not work" when pressed).
+    /// </summary>
+    [AvaloniaTest]
+    public void TheTilesAreOpenedByThePointerAsWellAsByEnter()
+    {
+      CountingServer server = new CountingServer();
+      FilterViewModel values = ScreenOn(server);
+      var workflow = new WorkflowManager();
+      var opened = new List<HomeSection>();
+
+      ShellWindow window = new ShellWindow(workflow, delegate (WorkflowFrame frame)
+      {
+        if (frame.StateId == "filter")
+        {
+          return new FilterView((FilterViewModel) frame.ViewModel, workflow,
+              delegate (HomeSection shelf)
+              {
+                opened.Add(shelf);
+                return new WorkflowFrame("titles", shelf.Label,
+                    new MediaBrowserViewModel(server.Client(), shelf));
+              });
+        }
+        return new MediaBrowserView((MediaBrowserViewModel) frame.ViewModel);
+      });
+      window.Width = 1600;
+      window.Height = 900;
+      workflow.Push(new WorkflowFrame("filter", values.Heading, values));
+      window.Show();
+      WaitUntil("the years to arrive", delegate { return values.Values.Count == 3; });
+
+      ListBox wall = window.GetVisualDescendants().OfType<ListBox>()
+          .First(list => list.Name == "valuesList");
+
+      // The second row's tile, asked for out of the realized containers rather than by index arithmetic, because
+      // which container holds which value is the panel's business, not the test's.
+      ListBoxItem row = wall.GetVisualDescendants().OfType<ListBoxItem>()
+          .First(item => item.DataContext is BrowseValue stood && stood.Value == "1984");
+
+      // A pointer never presses a whole tile: it presses the deepest thing under it, here the value's own writing.
+      // The tap is handed over the way the people wall's test hands one over (TestTheWallOfPeople) - a headless
+      // frame drives no mouse - with the source deep inside the tile, as a real tap arrives.
+      TextBlock word = row.GetVisualDescendants().OfType<TextBlock>()
+          .First(t => t.IsVisible && t.Bounds.Height > 4);
+      var pressing = new PointerPressedEventArgs(word, null!, word,
+          new Point(word.Bounds.Width / 2, word.Bounds.Height / 2), 1,
+          new PointerPointProperties(), KeyModifiers.None)
+      {
+        RoutedEvent = InputElement.PointerPressedEvent
+      };
+      word.RaiseEvent(new TappedEventArgs(InputElement.TappedEvent, pressing) { Source = word });
+      Pump();
+
+      Assert.That(values.Selected!.Value, Is.EqualTo("1984"),
+          "the press puts the caret on the value the pointer hit");
+      Assert.That(opened, Has.Count.EqualTo(1),
+          "and the same press opens the titles that carry it - a wall that only selects under a hand and never "
+          + "opens is the bug this test was written for");
+      Assert.That(opened[0].By, Is.EqualTo("year"));
+      Assert.That(opened[0].Value, Is.EqualTo("1984"));
 
       window.Close();
     }

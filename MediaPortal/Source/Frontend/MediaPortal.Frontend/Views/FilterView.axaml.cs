@@ -167,6 +167,12 @@ namespace MediaPortal.Frontend.Views
       // A value pointed at is the same question its Enter asks, which is the law every tile that is a door in this
       // front end answers (PeopleView.Hooks its cards the same way).  Hooked as a routed tap on the wall rather than
       // on a tile, because the tile is whatever the template grew.
+      // On the bubble, exactly where the people wall and the shelf's people bands hook theirs, and not in the
+      // tunnel: the ListBox raises the tap on itself once the press has settled into a selection, and a handler
+      // listening before the item has marked itself selected reads a SelectedItem that is still the tile from
+      // before the press - so the first press of a session opens nothing but the caret moving.  The row it hands
+      // over is then asked to be focused first, as the people wall focuses its card, so that Back from the titles
+      // returns the keys to the wall they were pressed on.
       valuesList.AddHandler(InputElement.TappedEvent, delegate (object? sender, TappedEventArgs args)
       {
         for (Visual? stood = args.Source as Visual; stood != null && stood != valuesList;
@@ -174,13 +180,14 @@ namespace MediaPortal.Frontend.Views
         {
           if (stood is Control tile && tile.DataContext is BrowseValue pressed)
           {
+            valuesList.Focus();
             valuesList.SelectedItem = pressed;
-            _wall?.OpenCommand.Execute(null);
             args.Handled = true;
+            _wall?.OpenCommand.Execute(null);
             return;
           }
         }
-      }, RoutingStrategies.Tunnel);
+      }, handledEventsToo: false);
 
       if (_wall != null)
       {
