@@ -4635,6 +4635,7 @@ namespace Tests.Server.Api
           { "Dance", 30 },
           { "Club", 31 },
           { "Pop", 3 },
+          { "R&B", 9 },
       });
       ServiceRegistration.Set<IGenreConverter>(converter);
       IMediaLibrary library = CreateCountingLibrary(counted, null, out _, out _, out _, out _);
@@ -4644,8 +4645,38 @@ namespace Tests.Server.Api
       Assert.That(result.Groups.First(group => group.Value == "Dance").Id, Is.EqualTo(30));
       Assert.That(result.Groups.First(group => group.Value == "Pop").Id, Is.EqualTo(3));
       Assert.That(result.Groups.First(group => group.Value == "Pop").Count, Is.EqualTo(27));
-      Assert.That(result.Groups.First(group => group.Value == "RnB").Id, Is.Null,
-          "a word the table has no pattern for keeps its own unnumbered row rather than guessing");
+      Assert.That(result.Groups.Single(group => group.Id == 9).Value, Is.EqualTo("R&B"),
+          "a library that wrote 'RnB' without its ampersand means the reference's R&B genre, so the word is read "
+          + "back into the spelling every table and art file knows it under");
+    }
+
+    [Test]
+    public void ARnBSpellingMergesWithTheAmpersandGenreItMeans()
+    {
+      // The user's library holds both "R&B" (two albums) and "RnB" (twenty-seven records split out of packed
+      // rows). They are one genre; a wall that showed them apart would stand two tiles beside each other where
+      // the reference shows one.
+      HomogenousMap counted = new HomogenousMap(typeof(string), typeof(int));
+      counted.Add("R&B", 2);
+      counted.Add("Dance, Club, Pop, RnB", 27);
+      var converter = new TableGenreConverter(new Dictionary<string, int>
+      {
+          { "Dance", 30 },
+          { "Club", 31 },
+          { "Pop", 3 },
+          { "R&B", 9 },
+      });
+      ServiceRegistration.Set<IGenreConverter>(converter);
+      IMediaLibrary library = CreateCountingLibrary(counted, null, out _, out _, out _, out _);
+
+      MediaController.GroupsResult result = GetGroups(library, "MovieItem", "genre", out _);
+
+      MediaController.GroupResult rnb = result.Groups.Single(group => group.Id == 9);
+      Assert.That(rnb.Count, Is.EqualTo(29),
+          "'RnB' carries the same number as 'R&B', so both spellings merge into the one heading like the "
+          + "reference's browse screen does");
+      Assert.That(result.Groups, Has.None.Property("Value").EqualTo("RnB"),
+          "and the ampersand-less spelling never stands as a heading of its own");
     }
 
     /// <summary>

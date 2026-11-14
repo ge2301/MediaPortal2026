@@ -28,6 +28,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Claims;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
@@ -1824,11 +1825,41 @@ namespace MediaPortal.Server.Api
       List<string> words = new List<string>(parts.Length);
       foreach (string part in parts)
       {
-        string word = part.Trim();
+        string word = NormalizeGenreWord(part.Trim());
         if (word.Length > 0 && !words.Contains(word, StringComparer.Ordinal))
           words.Add(word);
       }
       return words;
+    }
+
+    /// <summary>
+    /// The spelling the reference's tables know a genre under. A library may write "RnB" where every table, tag
+    /// standard and art file says "R&amp;B"; the ampersand spelling is what the converter's pattern list holds, so
+    /// that is the shape the word is read back into before it is numbered, counted and merged. Words whose letters
+    /// already spell a known genre are left alone, which keeps everything else exactly as the library wrote it.
+    /// </summary>
+    private static string NormalizeGenreWord(string word)
+    {
+      // "RnB"/"RNB"/"rn b" without its ampersand is the one packing loss tag writers repeat. The rename only
+      // happens when the tables really number the ampersand spelling, so a library that wrote "RnB" while its
+      // tables hold no R&B at all keeps its own word and its own unnumbered row rather than wearing a name
+      // whose picture was never looked up for it.
+      if (!Regex.IsMatch(word, @"^r\s*n\s*b$", RegexOptions.IgnoreCase))
+        return word;
+      return GenreKnownToTables("R&B", GenreCategory.Music) ? "R&B" : word;
+    }
+
+    /// <summary>
+    /// Whether the reference's genre tables have a number for this word. Asked through the same converter the
+    /// numbering falls back to, so a heading can only be renamed into a number when the tables really hold one.
+    /// </summary>
+    private static bool GenreKnownToTables(string word, string category)
+    {
+      IGenreConverter converter = ServiceRegistration.Get<IGenreConverter>(false);
+      if (converter == null)
+        return false;
+      int genreId;
+      return converter.GetGenreId(word, category, null, out genreId) && genreId != 0;
     }
 
     /// <summary>The characters that divide one genre field into several genres.</summary>
