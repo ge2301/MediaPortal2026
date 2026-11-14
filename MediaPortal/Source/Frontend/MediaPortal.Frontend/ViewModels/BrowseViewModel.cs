@@ -49,10 +49,11 @@ namespace MediaPortal.Frontend.ViewModels
   /// </summary>
   public sealed class BrowseValue
   {
-    public BrowseValue(string value, int count)
+    public BrowseValue(string value, int count, string? picture = null)
     {
       Value = value;
       Count = count;
+      Picture = picture;
     }
 
     /// <summary>The value as the database stored it - a genre name, a year, a person's name.</summary>
@@ -60,6 +61,28 @@ namespace MediaPortal.Frontend.ViewModels
 
     /// <summary>How many titles in this shelf carry it, counted by the server rather than guessed at here.</summary>
     public int Count { get; }
+
+    /// <summary>
+    /// The name of the skin picture this value is filed under, or null when it has none.
+    /// </summary>
+    /// <remarks>
+    /// A value's picture is named by the number the library holds the value under rather than by its words, which
+    /// is the reference's arrangement: its skin files its genre art as <c>GenreVideo\Square\&lt;number&gt;.jpg</c>
+    /// because the words of a genre are translated and renamed by importers while its number is what the library
+    /// has always called it by.  Only genres answer this, and only when the importer wrote the number beside the
+    /// words.  A name is all a value ever carries - the worn skin is asked for the picture itself, by the view
+    /// (<see cref="Views.SkinImageConverter"/>), so no value holds a bitmap and no value goes looking in a folder.
+    /// </remarks>
+    public string? Picture { get; }
+
+    /// <summary>
+    /// Whether this value came with a picture, which is the question a tile asks before it decides whether to draw
+    /// the picture or its words.
+    /// </summary>
+    public bool ShowsPicture
+    {
+      get { return !string.IsNullOrEmpty(Picture); }
+    }
 
     /// <summary>
     /// The number on its own, in the words a tile writes under the value it counted.

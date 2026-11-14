@@ -44,6 +44,7 @@ using MediaPortal.Common.MediaManagement;
 using MediaPortal.Common.MediaManagement.DefaultItemAspects;
 using MediaPortal.Common.MediaManagement.MLQueries;
 using MediaPortal.Common.ResourceAccess;
+using MediaPortal.Common.Services.GenreConverter;
 using MediaPortal.Common.Services.ResourceAccess;
 using MediaPortal.Common.Settings;
 using MediaPortal.Common.UserProfileDataManagement;
@@ -1361,6 +1362,23 @@ namespace MediaPortal.Server.Api
       /// that has ever seen all of them.
       /// </summary>
       public int Count { get; set; }
+
+      /// <summary>
+      /// The number the library holds this value under, when it holds one: only <c>by=genre</c> answers it, with
+      /// the genre's own id from the title's genre rows.
+      /// </summary>
+      /// <remarks>
+      /// It is the key the genre's picture is filed under. A genre's words travel between languages - the same
+      /// genre is "Abenteuer" in one library and "Adventure" in the next, and a scraper can rename the words of
+      /// one genre into the words of another - while its number is what the library has always called it by, so
+      /// it is the one thing a picture can be named after without being lost the next import. The reference's
+      /// skin does exactly this: its genre art stands in files named after this number.
+      /// <para>
+      /// Absent for every other category, because a year, a name and a rating are their own key, and for a genre
+      /// whose rows were written without a number.
+      /// </para>
+      /// </remarks>
+      public int? Id { get; set; }
     }
 
     /// <summary>
@@ -1416,6 +1434,12 @@ namespace MediaPortal.Server.Api
     /// title (<c>GenreAspect</c> rows and the credit lists on <c>VideoAspect</c>), which is the same source the
     /// details of a title read from; a library imported from bare files without NFOs will answer with few groups,
     /// truthfully.
+    /// </para>
+    /// <para>
+    /// Genres are the one category counted by two things at once: the words, which are what a screen lists, and
+    /// the genre's number, which is answered as the group's <c>id</c>. Both come out of one query, and the number
+    /// is asked for because it is the only part of a genre that survives a translation - see
+    /// <see cref="GroupResult.Id"/>.
     /// </para>
     /// </remarks>
     [HttpGet("groups")]
@@ -1483,8 +1507,30 @@ namespace MediaPortal.Server.Api
         // films start at eighteen, because the list under that heading would be empty and an empty shelf reads
         // as a hole in the library rather than as a rule of the house.
         IFilter allowed = CallerRestrictionFilter(necessary);
-        HomogenousMap counted = mediaLibrary.GetValueGroups(spec, allowed, projection, necessary, null, false,
-            VirtualTitles.ShowsVirtualFor(necessary));
+
+        // Genres are counted by their words, which is what a screen lists, but asked for by their number as
+        // well: a genre's number is the only thing a library holds that never changes when the genre is shown in
+        // another language or renamed by a scraper, so it is the key the genre's own picture is filed under -
+        // the reference's skin names its genre art '<number>.jpg' for exactly this reason. Asking both in one
+        // question is the reference's own arrangement (FilterByGenreCriterion), and every other category keeps
+        // the single question it always asked, because nothing else this endpoint counts has a number.
+        bool countingGenres = string.Equals(known, "genre", StringComparison.OrdinalIgnoreCase);
+        HomogenousMap counted;
+        HomogenousMap numbers = null;
+        if (countingGenres)
+        {
+          Tuple<HomogenousMap, HomogenousMap> countedWithNumbers = mediaLibrary.GetKeyValueGroups(
+              GenreAspect.ATTR_ID, spec, allowed, projection, necessary, null, false,
+              VirtualTitles.ShowsVirtualFor(necessary));
+          if (countedWithNumbers == null)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+          counted = countedWithNumbers.Item1;
+          numbers = NumberedGenres(counted, countedWithNumbers.Item2, aspectId);
+        }
+        else
+          counted = mediaLibrary.GetValueGroups(spec, allowed, projection, necessary, null, false,
+              VirtualTitles.ShowsVirtualFor(necessary));
+
         if (counted == null)
           // Null is the library's way of saying it is in maintenance mode and counted nothing; an empty answer
           // here would read as "no title carries a genre" rather than as "ask again later".
@@ -1540,7 +1586,8 @@ namespace MediaPortal.Server.Api
             groups.Add(new GroupResult
             {
               Value = named,
-              Count = Convert.ToInt32(entry.Value, CultureInfo.InvariantCulture)
+              Count = Convert.ToInt32(entry.Value, CultureInfo.InvariantCulture),
+              Id = NumberOf(numbers, entry.Key)
             });
           }
         }
@@ -1564,6 +1611,95 @@ namespace MediaPortal.Server.Api
       {
         return NotReady(ex);
       }
+    }
+
+    /// <summary>
+    /// The numbers of a counted genre wall: the ones the titles themselves carry, and for the genres whose rows
+    /// were written without one, the number the reference's genre converter says the shelf's category keeps those
+    /// words under.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A library imported by an extractor that knew the genre table wrote each genre's number onto its rows, and
+    /// those numbers are what the counting answered beside the words - they win untouched, because they are what
+    /// the titles themselves say. What remains is a genre whose importer wrote only the words, which is every
+    /// library whose titles came in without the lookup having run. For those the reference asks its own question
+    /// again, just somewhere else: at import time its extractors call
+    /// <c>IGenreConverter.GetGenreId(name, category, culture, out id)</c>, and the GenreProvider plugin answers
+    /// from tables that match a genre's words - in any language it knows - to the number the shelf's category
+    /// holds it under. Asking the same converter here, after the counting rather than during the import, costs
+    /// nothing per title and gives the wall exactly the numbers the reference would have written.
+    /// </para>
+    /// <para>
+    /// A genre the converter has no pattern for - "Unbekanntes Genre", a household's own spelling - stays without
+    /// a number and stands without art, which is the same state the reference leaves it in; guessing a neighbour's
+    /// number would hang the wrong picture on the wall. When the installation runs without the GenreProvider
+    /// plugin there is no converter to ask at all, and the wall is as numbered as its titles made it.
+    /// </para>
+    /// </remarks>
+    /// <param name="counted">The wall's genres as the database counted them, keyed by their words.</param>
+    /// <param name="numbers">The numbers the titles' own genre rows carried, or null when none did.</param>
+    /// <param name="shelfId">The shelf being counted, which decides which category's table answers.</param>
+    private static HomogenousMap NumberedGenres(HomogenousMap counted, HomogenousMap numbers, Guid shelfId)
+    {
+      if (counted == null || counted.Count == 0)
+        return numbers;
+
+      IGenreConverter converter = ServiceRegistration.Get<IGenreConverter>(false);
+      if (converter == null)
+        return numbers;
+
+      string category = GenreCategoryOf(shelfId);
+      HomogenousMap filled = numbers ?? new HomogenousMap(counted.KeyType, typeof(int));
+      foreach (KeyValuePair<object, object> entry in counted)
+      {
+        if (entry.Key == null || entry.Key.Equals(HomogenousMap.NULL))
+          continue;
+        object held;
+        if (filled.TryGetValue(entry.Key, out held) && held is int)
+          // The title itself said this number; a table never overrules what the library holds.
+          continue;
+        int genreId;
+        if (converter.GetGenreId(Convert.ToString(entry.Key, CultureInfo.InvariantCulture), category, null, out genreId))
+          filled[entry.Key] = genreId;
+      }
+      return filled;
+    }
+
+    /// <summary>
+    /// Which of the converter's tables a shelf's genres are looked up in: music shelves in the audio table,
+    /// series shelves in the series table, everything else in the films' - the same division the importers use
+    /// when they write a genre's number, and the reason the same words can be two different pictures on two
+    /// different shelves.
+    /// </summary>
+    private static string GenreCategoryOf(Guid shelfId)
+    {
+      if (shelfId == AudioAspect.ASPECT_ID || shelfId == AudioAlbumAspect.ASPECT_ID)
+        return GenreCategory.Music;
+      if (shelfId == SeriesAspect.ASPECT_ID)
+        return GenreCategory.Series;
+      return GenreCategory.Movie;
+    }
+
+    /// <summary>
+    /// The number the library holds for one counted genre, or null when it holds none.
+    /// </summary>
+    /// <remarks>
+    /// Only the genre counting asks for numbers at all, so every other category answers null here and its groups
+    /// carry no <see cref="GroupResult.Id"/>. Within a genre wall a number is absent when the importer wrote the
+    /// genre's words but never looked its number up - a title imported from a plain filename, or from a scraper
+    /// that knew the name and not the table. Such a genre is still counted and still browsable; it simply has no
+    /// key under which a picture of its own could be filed, and a screen that has nothing to ask a picture by
+    /// draws the value's words instead.
+    /// </remarks>
+    private static int? NumberOf(HomogenousMap numbers, object value)
+    {
+      if (numbers == null || value == null)
+        return null;
+      object found;
+      if (!numbers.TryGetValue(value, out found))
+        return null;
+      return found as int?;
     }
 
     /// <summary>

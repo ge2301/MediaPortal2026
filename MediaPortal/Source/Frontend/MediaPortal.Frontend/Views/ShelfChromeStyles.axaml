@@ -58,9 +58,11 @@
     </Setter>
   </Style>
 
-  <!-- A wall of names is a list of a thousand tiles and shows no bar for them: the shelf's wall hides its scroll
-       line the same way, by the ScrollViewer's own visibility rather than by a rule of the skin. -->
-  <Style Selector="ListBox#peopleList">
+  <!-- A wall of values is a list of tiles and shows no bar for them, as a wall of names does not either: the
+       shelf's wall hides its scroll line the same way, by the ScrollViewer's own visibility rather than by a rule
+       of the skin.  The two walls are named here by their own x:Name because that is how the shelf's list is named
+       too; everything else they wear is the same set of classes. -->
+  <Style Selector="ListBox#peopleList, ListBox#valuesList">
     <Setter Property="Background" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="Padding" Value="0"/>

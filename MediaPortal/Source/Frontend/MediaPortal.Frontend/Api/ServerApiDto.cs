@@ -270,7 +270,8 @@ namespace MediaPortal.Frontend.Api
   /// </summary>
   public record MediaGroup(
       [property: JsonPropertyName("value")] string? Value,
-      [property: JsonPropertyName("count")] int Count);
+      [property: JsonPropertyName("count")] int Count,
+      [property: JsonPropertyName("id")] int? Id = null);
 
   /// <summary>
   /// The answer of <c>GET api/media/groups</c>: the values of one category, biggest first, as the database counted

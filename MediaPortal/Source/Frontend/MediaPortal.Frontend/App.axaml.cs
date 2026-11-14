@@ -1697,12 +1697,15 @@ namespace MediaPortal.Frontend
 
       if (state == "filter")
       {
-        // One counting of one shelf on a screen of its own, opened from a shelf's own shortcut tile. A pressed
+        // One counting of one shelf on a screen of its own, opened from a shelf's own shortcut tile.  A pressed
         // value opens the ordinary shelf cut to it - through the same door every other road to a shelf walks, so
         // the cut shelf remembers its order and its shape like the whole one does - and it is pushed as its own
-        // stop, which is what leads the way back out of the titles onto the value that was pressed.
+        // stop, which is what leads the way back out of the titles onto the value that was pressed.  The rail's
+        // filter page asks for the other counting of the same shelf, which is a second wall and therefore a second
+        // stop with the way back standing behind it.
         return new FilterView((FilterViewModel)frame.ViewModel, _workflow,
-            delegate (HomeSection section) { return BrowserFrame(section); });
+            delegate (HomeSection section) { return BrowserFrame(section); },
+            delegate (FilterViewModel wall, string by) { return FilterFrame(wall.Shelf, by); });
       }
 
       if (state == "tvguide" || state == "radioguide")
@@ -1811,6 +1814,17 @@ namespace MediaPortal.Frontend
       // the wake-up itself - walks through this one door, which is where the remembering happens.
       Settings.ClientSettings.RecordShelf(section.Label);
       return TitlesFrame(new MediaBrowserViewModel(_home.Client, section, null, _home.Pictures), section.Label);
+    }
+
+    /// <summary>
+    /// The wall of one counting of one shelf: every value that counting takes in this library, each standing for the
+    /// titles underneath it.  Both roads onto a wall - a shelf's own shortcut tile and the filter page of a wall
+    /// that is already standing - build it here, so that a shelf's second wall is headed and framed like its first.
+    /// </summary>
+    private Workflow.WorkflowFrame FilterFrame(HomeSection section, string by)
+    {
+      FilterViewModel values = new FilterViewModel(_home.Client, section, by);
+      return new Workflow.WorkflowFrame("filter", values.Heading, values);
     }
 
     /// <summary>

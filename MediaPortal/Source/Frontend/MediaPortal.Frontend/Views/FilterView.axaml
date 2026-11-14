@@ -1,90 +1,389 @@
-<UserControl xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:MediaPortal.Frontend.ViewModels"
-        x:Class="MediaPortal.Frontend.Views.FilterView"
-        x:DataType="vm:FilterViewModel"
-        Name="filter"
-        Background="Transparent"
-        >
-
+﻿<UserControl x:Class="MediaPortal.Frontend.Views.FilterView"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MediaPortal.Frontend.ViewModels"
+             xmlns:views="using:MediaPortal.Frontend.Views"
+             x:DataType="vm:FilterViewModel">
   <!--
-    One counting of one shelf, stood on a screen of its own: every year (or every genre) the titles of that shelf
-    carry, one tile each, with the server's number under the value. The tiles are the point of the screen - the
-    viewer came here to choose one - so they are laid as the walls lay their tiles and not as rows of a table, and
-    the words above and below are the two sentences that explain what a press does.
+    One counting of one shelf - every year, or every genre, that a shelf's titles carry - worn like a media screen
+    wears its shelf, and like the wall of people wears it.
 
-    The wall is the shelf's own list, dressed by the shelf's own classes, for the same reason the people's wall
-    is: everything a wall of tiles has to be - walked by a caret, virtualized by a thousand rows, laid in the
-    panel that wraps whole tiles and dresses the stood one - is what that control already is.
+    This screen owns exactly two things: the square a value is drawn in and the row a value reads in.  Every other
+    piece of furniture is the shelf's own and is worn from the shelf's own files: the ground and the two bands, the
+    rail's styles and its plates (ShelfChromeStyles.axaml and ShelfChrome.axaml, classes shelf-backdrop /
+    shelf-band-top / shelf-band-bottom / media-menu), the room's measures and the way it slides, the empty head that
+    only costs its fifty-one points, the column of words at the right hand end with its wash and its negative
+    margins, the two lines at the foot, and the ring a tile answers a caret with (Border.home-tile-edge, the
+    shelf's own).  A viewer who learned on a shelf of records where the menu's "View" stands, where the rail comes
+    out, how far the words reach and what a stood tile looks like finds all of it standing where they left it.
+
+    What the wall has to say for itself is said at its foot and in its column.  Nothing stands above the wall: the
+    reference's shelf head carries the heading and nothing else, never "38 years, counted by the server", and never
+    writes a sentence over the tiles a viewer came to look at.
   -->
+  <UserControl.Styles>
+    <StyleInclude Source="avares://MediaPortal.Frontend/Views/ShelfChromeStyles.axaml"/>
+  </UserControl.Styles>
 
   <UserControl.Resources>
-    <DataTemplate x:Key="FilterWallTile" x:DataType="vm:BrowseValue">
-      <Border Classes="home-tile-shadow"
-              Width="205"
-              Height="120"
-              Margin="8,8,8,14"
-              Background="#222222"
-              CornerRadius="10"
-              Focusable="True">
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://MediaPortal.Frontend/Views/ShelfChrome.axaml"/>
+      </ResourceDictionary.MergedDictionaries>
+
+      <!--
+        One value as a tile, on the plate the wall's cards stand on and in the square they are drawn in: the outer
+        border carries the shadow, the plate is the dark ground a cover without a picture stands on at the wall, and
+        the edge ring is drawn last of all.  Classes, not copies - every one of those surfaces is dressed by the
+        shelf's rules, which is what makes the ring light under a caret the way a cover of the home wall lights.
+
+        THIS is the wall of words, worn when the values have no pictures - every year, and every genre on a skin
+        that carries no art.  The words are then the tile: the value at the tile's own lettering, and the number of
+        titles that justifies the tile standing at all under it.  Both are read from the sofa, which is what the
+        tile's measure and the people wall's are for.
+      -->
+      <DataTemplate x:Key="ValueWallTile" x:DataType="vm:BrowseValue">
+        <Border Classes="trackcard person-card home-tile-shadow"
+                Focusable="True"
+                Width="205"
+                Height="195"
+                Margin="8,8,8,14">
+          <Panel>
+            <StackPanel VerticalAlignment="Center" Spacing="6" Margin="10,8">
+              <TextBlock Text="{Binding Value}"
+                         FontSize="30"
+                         FontWeight="SemiBold"
+                         TextWrapping="Wrap"
+                         TextAlignment="Center"
+                         MaxLines="3"
+                         TextTrimming="CharacterEllipsis"
+                         Foreground="{DynamicResource TextBrush}"
+                         IsHitTestVisible="False"/>
+              <TextBlock Text="{Binding CountText}"
+                         FontSize="15"
+                         Opacity="0.7"
+                         TextAlignment="Center"
+                         TextTrimming="CharacterEllipsis"
+                         Foreground="{DynamicResource TextBrush}"
+                         IsHitTestVisible="False"/>
+            </StackPanel>
+            <!-- The ring, over the finished edge and drawn last: at rest the skin's ghost of a ring, under a caret
+                 full light, by the shelf's own rule for these two classes. -->
+            <Border Classes="home-tile-edge" IsHitTestVisible="False"/>
+          </Panel>
+        </Border>
+      </DataTemplate>
+
+      <!--
+        One value that came with a picture of its own - a genre the library numbered - worn exactly as the people
+        wall wears a name whose portrait arrived: the same face clipping the art, the same veil the word is read
+        through, the same ring, and the art growing by the skin's own scale under a caret (ShelfChrome.axaml's
+        PersonCardTile, and behind it the reference's own genre tiles, which are a picture with the genre's word
+        under it: MediaStyles.xaml's CoverViewVideoGenreFilterItemTemplate).  The measure stays this wall's 205x195,
+        which is the reference's audio grid, and nothing about the card is new: only the word under the picture
+        carries a number as well, because a counting is the one thing a wall of people never had to say.
+
+        A value of such a wall whose number the skin has no art for stands with the counting's mark on its face, as
+        a name without a portrait does - the same answer the people wall gives, and the reason the mark and the
+        picture share one face instead of two templates.
+      -->
+      <DataTemplate x:Key="ValueWallPictureTile" x:DataType="vm:BrowseValue">
+        <Border Classes="trackcard person-card home-tile-shadow"
+                Focusable="True"
+                Width="205"
+                Height="195"
+                Margin="8,8,8,14">
+          <Panel>
+            <Border Classes="person-face" ClipToBounds="True">
+              <Panel>
+                <Image Classes="home-tile-art"
+                       Source="{Binding Picture,
+                                        Converter={x:Static views:SkinImageConverter.Instance}}"
+                       Stretch="UniformToFill"
+                       IsVisible="{Binding ShowsPicture}"
+                       IsHitTestVisible="False"/>
+                <Path Data="{Binding $parent[UserControl].DataContext.CategoryIcon,
+                                     Converter={x:Static views:SkinIconGeometryConverter.Instance}}"
+                      Fill="{DynamicResource TextBrush}"
+                      Opacity="0.4"
+                      Width="64"
+                      Height="64"
+                      Stretch="Uniform"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      IsVisible="{Binding !ShowsPicture}"
+                      IsHitTestVisible="False"/>
+              </Panel>
+            </Border>
+            <Border Classes="person-veil" IsHitTestVisible="False"/>
+            <StackPanel Spacing="2" Margin="8,0,8,8" VerticalAlignment="Bottom">
+              <TextBlock Text="{Binding Value}"
+                         FontSize="15"
+                         FontWeight="SemiBold"
+                         TextWrapping="Wrap"
+                         TextAlignment="Center"
+                         MaxLines="2"
+                         TextTrimming="CharacterEllipsis"
+                         Foreground="{DynamicResource TextBrush}"
+                         IsHitTestVisible="False"/>
+              <TextBlock Text="{Binding CountText}"
+                         FontSize="15"
+                         Opacity="0.7"
+                         TextAlignment="Center"
+                         TextTrimming="CharacterEllipsis"
+                         Foreground="{DynamicResource TextBrush}"
+                         IsHitTestVisible="False"/>
+            </StackPanel>
+            <Border Classes="home-tile-edge" IsHitTestVisible="False"/>
+          </Panel>
+        </Border>
+      </DataTemplate>
+
+      <!--
+        One value as a row, cut on this skin's own row of titles (templates.xaml's TitleRowTemplate): the same two
+        grids in the same Panel, the same measurements and the same two class names, so that it is the skin that
+        decides when either grid shows, what sheet the stood row wears and how bold its words are.  Nothing here
+        draws a sheet or picks a colour for a stood row.
+
+        A resting row carries no picture, which is the shelf's law for its rows: the picture arrives with the sheet.
+        The square it arrives in is the row's own eighty-nine points, and what stands in it is the value's own
+        picture where the library numbered the value - a genre's art, worn by the same rule as the wall's tiles -
+        and otherwise the mark the home tile of this counting wore, the year's own figure or the genre's own,
+        because a plate with a mark on it is what every other screen of this front end stands where a picture would
+        stand.
+      -->
+      <DataTemplate x:Key="ValueWallRow" x:DataType="vm:BrowseValue">
         <Panel>
-          <StackPanel VerticalAlignment="Center" Spacing="4" Margin="10,8">
-            <!-- The value is the tile: a year is four figures and a genre is a word, and both have to be read from
-                 the sofa, so the figure carries the tile and the number that justifies it sits under it. -->
-            <TextBlock Text="{Binding Value}"
-                       FontSize="30"
-                       FontWeight="SemiBold"
-                       TextWrapping="Wrap"
-                       TextAlignment="Center"
-                       MaxLines="2"
-                       TextTrimming="CharacterEllipsis"
-                       HorizontalAlignment="Center"
-                       Foreground="{DynamicResource TextBrush}"
+          <Grid Classes="nereus-row-rest" ColumnDefinitions="Auto,5*,1.4*" ColumnSpacing="20" MinWidth="700"
+                Margin="30,4">
+            <TextBlock Grid.Column="1" Text="{Binding Value}" TextTrimming="CharacterEllipsis"/>
+            <TextBlock Grid.Column="2" Text="{Binding CountText}" TextTrimming="CharacterEllipsis" Opacity="0.7"/>
+          </Grid>
+          <Grid Classes="nereus-row-focus" ColumnDefinitions="Auto,1*" ColumnSpacing="20" MinWidth="700"
+                MinHeight="89" Margin="15,4,30,4">
+            <Border Classes="nereus-row-cover person-card" Width="89" Height="89" CornerRadius="5" ClipToBounds="True">
+              <Panel>
+                <Image Classes="home-tile-art"
+                       Source="{Binding Picture,
+                                        Converter={x:Static views:SkinImageConverter.Instance}}"
+                       Stretch="UniformToFill"
+                       IsVisible="{Binding ShowsPicture}"
                        IsHitTestVisible="False"/>
-            <TextBlock Text="{Binding CountText}"
-                       FontSize="15"
-                       Opacity="0.7"
-                       TextAlignment="Center"
-                       HorizontalAlignment="Center"
-                       Foreground="{DynamicResource TextBrush}"
-                       IsHitTestVisible="False"/>
-          </StackPanel>
-          <!-- The ring, over the finished edge: the skin's ghost of one at rest, full light under a caret. -->
-          <Border Classes="home-tile-edge" IsHitTestVisible="False"/>
+                <Path Data="{Binding $parent[UserControl].DataContext.CategoryIcon,
+                                     Converter={x:Static views:SkinIconGeometryConverter.Instance}}"
+                      Fill="{DynamicResource TextBrush}"
+                      Opacity="0.55"
+                      Width="34"
+                      Height="34"
+                      Stretch="Uniform"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      IsVisible="{Binding !ShowsPicture}"
+                      IsHitTestVisible="False"/>
+              </Panel>
+            </Border>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+              <TextBlock Text="{Binding Value}" TextTrimming="CharacterEllipsis"/>
+              <TextBlock Classes="nereus-row-second" Text="{Binding CountText}" Opacity="0.7"
+                         TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
+          </Grid>
         </Panel>
-      </Border>
-    </DataTemplate>
+      </DataTemplate>
+    </ResourceDictionary>
   </UserControl.Resources>
 
-  <DockPanel Margin="48,36">
+  <!-- THE GROUND, the shelf's own: this skin's background over the whole screen, and the two bands the reference's
+      media master hung over those - a hundred points at the head, two hundred and sixty at the foot.  A counting
+      has no picture of its own to throw over the screen, so the ground stays the skin's plain one, which is exactly
+      what a shelf of titles without fanart looks like.  The bands only paint, so they are asked for by wearing the
+      classes and stand between the picture and everything the screen has to say. -->
+  <Panel ClipToBounds="True">
+    <Image Classes="shelf-backdrop"
+           Source="{Binding Converter={x:Static views:SkinImageConverter.Instance}, ConverterParameter=Background.PNG}"/>
+    <Panel IsHitTestVisible="False">
+      <Border Classes="shelf-band-top"/>
+      <Border Classes="shelf-band-bottom"/>
+    </Panel>
 
-    <StackPanel DockPanel.Dock="Top" Spacing="2" Margin="0,0,0,20">
-      <TextBlock Text="{Binding Heading}" FontSize="40" FontWeight="SemiBold"/>
-      <TextBlock Text="{Binding Subtitle}"
-                 FontSize="18"
-                 Opacity="0.7"
-                 TextWrapping="Wrap"
-                 MaxWidth="1500"
-                 HorizontalAlignment="Left" />
-    </StackPanel>
+    <!--
+      THE ROOM, two hundred points of its left edge and two hundred of its bottom off the screen, which is where
+      the rail stands while it is shut.  The transform is what travels, exactly as the shelf's and the people wall's
+      do, and nothing here clips.
+    -->
+    <Grid Name="room"
+          Margin="-200,0,0,-200"
+          ColumnDefinitions="200,*"
+          RowDefinitions="*,200"
+          ClipToBounds="False">
+      <Grid.RenderTransform>
+        <TranslateTransform X="0" Y="0">
+          <TranslateTransform.Transitions>
+            <Transitions>
+              <DoubleTransition Property="X" Duration="00:00:00.35"/>
+              <DoubleTransition Property="Y" Duration="00:00:00.35"/>
+            </Transitions>
+          </TranslateTransform.Transitions>
+        </TranslateTransform>
+      </Grid.RenderTransform>
 
-    <TextBlock DockPanel.Dock="Bottom"
-               Name="statusLine"
-               Text="{Binding Status}"
-               FontSize="20"
-               Opacity="0.85"
-               Margin="0,18,0,0"
-               TextWrapping="Wrap" />
+      <!--
+        THE RAIL, standing in the two hundred points that are off the room's left edge, from under the head band
+        down past the bottom of the window so that the glow along its right edge has ground to stand on.  Its
+        plates, its glass and its behaviour are the shelf's - the styles are included above, its rows are the
+        shelf's own MediaMenuTile and the walking is ShelfRail - so nothing about this panel is new but its rows.
+      -->
+      <Panel Name="sideMenu"
+             Grid.RowSpan="2"
+             Grid.Column="0"
+             Margin="0,90,0,0"
+             IsVisible="False"
+             ClipToBounds="False">
+        <DockPanel Margin="10,0,0,0">
+          <ListBox Name="mediaMenuList"
+                   Classes="media-menu"
+                   ItemsSource="{Binding MediaMenu}"
+                   ItemTemplate="{StaticResource MediaMenuTile}"
+                   Margin="0,14,0,200"
+                   Focusable="True"
+                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                   ScrollViewer.VerticalScrollBarVisibility="Hidden">
+            <ListBox.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Vertical"/>
+              </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+          </ListBox>
+        </DockPanel>
+      </Panel>
 
-    <ListBox Name="valuesList"
-             Classes="nereus-shelf-tiles"
-             Focusable="True"
-             ItemsSource="{Binding Values}"
-             SelectedItem="{Binding Selected, Mode=TwoWay}"
-             ItemTemplate="{StaticResource FilterWallTile}"
-             FontSize="24"
-             ScrollViewer.VerticalScrollBarVisibility="Hidden"
-             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-             ClipToBounds="False"/>
-  </DockPanel>
+      <!--
+        THE WALL AND ITS WORDS, in the shelf's own room: ten points of panel, then the wall's column and the column
+        of words, divided by the same measure the shelf divides them by (ShelfDetailsColumn, which the shelf asks
+        too), so a wall of values and a shelf of the same library at the same window width stand their tiles at the
+        same x.  While the words are away the wall has the room to itself, which is what the shelf does when a
+        viewer turns them off.
+      -->
+      <Panel Grid.Row="0"
+             Grid.Column="1"
+             Margin="10,0,10,10">
+        <Grid Name="contentGrid" ColumnDefinitions="*,0" ColumnSpacing="0" ClipToBounds="False">
+
+          <DockPanel Grid.Column="0" ClipToBounds="False">
+            <!--
+              The head, which is empty on purpose and stands for its fifty-one points of offset alone: what a wall
+              of values has to say for itself is said at its foot and in its column, never over the tiles.
+            -->
+            <StackPanel DockPanel.Dock="Top" Spacing="2" Margin="0,51,0,6"/>
+
+            <!--
+              THE WALL.  A list like the shelf's, because everything a wall has to be - walked by a caret,
+              virtualized by a thousand tiles, laid in the same tile panel the shelf's grid lays its posters in - is
+              what that control already is.  Its item template and its panel are put on by the code behind, which is
+              the only place that knows which of the two shapes the viewer picked.
+            -->
+            <ListBox Name="valuesList"
+                     Classes="nereus-shelf-tiles"
+                     Focusable="True"
+                     ItemsSource="{Binding Values}"
+                     SelectedItem="{Binding Selected, Mode=TwoWay}"
+                     ItemTemplate="{StaticResource ValueWallTile}"
+                     FontSize="24"
+                     Margin="0,0,0,53"
+                     ScrollViewer.VerticalScrollBarVisibility="Hidden"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ClipToBounds="False"/>
+          </DockPanel>
+
+          <!--
+            THE COLUMN OF WORDS about the value the caret stands on: the shelf's details column, its measures and
+            all - Grid.Column 1, forty-five points of air before it and ten past the window's edge, ninety-six above
+            the head and two hundred and seventy past the bottom.  The wash is the shelf's wash, so the words sit on
+            an even ground and the wall behind the column is still a wall.
+
+            The value is said first, in the shelf's own letters for the name of a thing, and what the library counts
+            under it stands in the shelf's table of pairs - the answer and the word under it, walked across the
+            width in a WrapPanel - as a title's "Length" and "Genre" do.
+          -->
+          <Border Name="detailsPanel"
+                  Grid.Column="1"
+                  Margin="45,-96,-10,-270"
+                  ClipToBounds="False"
+                  IsVisible="{Binding ShowsDetailsWords}">
+            <Border.Background>
+              <!--  A bare number in StartPoint/EndPoint is device-independent pixels to Avalonia, not the fraction
+                    WPF reads, so a wash written without the '%' suffix is a line one point long: only '%' means
+                    "of the panel". -->
+              <LinearGradientBrush StartPoint="100%,45%" EndPoint="3%,50%">
+                <GradientStop Color="#99000000" Offset="0"/>
+                <GradientStop Color="#99000000" Offset="0.6"/>
+                <GradientStop Color="#00000000" Offset="1"/>
+              </LinearGradientBrush>
+            </Border.Background>
+            <Grid Name="detailsWords"
+                  Margin="0,140,50,200"
+                  VerticalAlignment="Top"
+                  ClipToBounds="True">
+              <Grid.RowDefinitions>
+                <!-- The head, which is said once: the value, in the shelf's letters for a name. -->
+                <RowDefinition Height="Auto"/>
+                <!-- The row the pairs of answers stand in, under the head. -->
+                <RowDefinition Height="Auto"/>
+              </Grid.RowDefinitions>
+              <TextBlock Grid.Row="0"
+                         Name="detailsName"
+                         Text="{Binding DetailsName}"
+                         FontSize="45"
+                         FontWeight="SemiBold"
+                         TextTrimming="CharacterEllipsis"
+                         Foreground="{DynamicResource TextBrush}"/>
+              <ItemsControl Grid.Row="1"
+                            Name="detailsFacts"
+                            ItemsSource="{Binding DetailsFacts}"
+                            ItemTemplate="{StaticResource MediaFactTemplate}"
+                            Margin="0,4,0,0">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal"/>
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+              </ItemsControl>
+            </Grid>
+          </Border>
+        </Grid>
+      </Panel>
+
+      <!--
+        THE LINE AT THE FOOT, in the place the shelf reserves for it: two hundred and forty from the room's left
+        hand, thirty-four above its bottom.  The two lines and the law between them are the shelf's own, word for
+        word: while the rail is out it names the plate the caret stands on and what that plate adds, and it goes
+        when the rail goes, because it is the rail's word and not the wall's.  With the details column turned away
+        the one line about the stood-on value stands here - the value and its number of titles - because the viewer
+        turned the column off, not the knowledge.
+      -->
+      <TextBlock Grid.Row="0"
+                 Grid.ColumnSpan="2"
+                 Text="{Binding MediaMenuFootLine}"
+                 FontSize="22"
+                 Foreground="{DynamicResource TextBrush}"
+                 HorizontalAlignment="Left"
+                 VerticalAlignment="Bottom"
+                 Margin="240,0,0,34"
+                 IsHitTestVisible="False"
+                 TextTrimming="CharacterEllipsis"
+                 IsVisible="{Binding MediaMenuVisible}"/>
+      <TextBlock Grid.Row="0"
+                 Grid.ColumnSpan="2"
+                 Text="{Binding ContentInfo}"
+                 FontSize="22"
+                 Foreground="{DynamicResource TextBrush}"
+                 HorizontalAlignment="Left"
+                 VerticalAlignment="Bottom"
+                 Margin="240,0,0,34"
+                 MaxWidth="1200"
+                 IsHitTestVisible="False"
+                 TextTrimming="CharacterEllipsis"
+                 IsVisible="{Binding ShowsContentInfo}"/>
+    </Grid>
+  </Panel>
 </UserControl>

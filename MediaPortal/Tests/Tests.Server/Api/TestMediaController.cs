@@ -42,6 +42,7 @@ using MediaPortal.Common.MediaManagement;
 using MediaPortal.Common.MediaManagement.DefaultItemAspects;
 using MediaPortal.Common.MediaManagement.MLQueries;
 using MediaPortal.Common.ResourceAccess;
+using MediaPortal.Common.Services.GenreConverter;
 using MediaPortal.Common.Services.ResourceAccess;
 using MediaPortal.Common.Services.ResourceAccess.LocalFsResourceProvider;
 using MediaPortal.Common.Settings;
@@ -102,6 +103,8 @@ namespace Tests.Server.Api
         ServiceRegistration.Remove<IFanArtCache>();
       if (ServiceRegistration.IsRegistered<IMediaAccessor>())
         ServiceRegistration.Remove<IMediaAccessor>();
+      if (ServiceRegistration.IsRegistered<IGenreConverter>())
+        ServiceRegistration.Remove<IGenreConverter>();
     }
 
     /// <summary>
@@ -4333,6 +4336,24 @@ namespace Tests.Server.Api
         out List<MediaItemAspectMetadata.AttributeSpecification> groupedBy,
         out List<ProjectionFunction> projections, out List<IEnumerable<Guid>> necessary)
     {
+      List<MediaItemAspectMetadata.AttributeSpecification> unused;
+      return CreateCountingLibrary(counted, null, out groupedBy, out unused, out projections, out necessary);
+    }
+
+    /// <summary>
+    /// The same counting library, able to answer the genre question with numbers beside the words, and recording
+    /// the number attribute it was asked for by.
+    /// </summary>
+    /// <param name="numbers">
+    /// The genre's numbers as the database hands them over - a map from the genre's words to its number, which is
+    /// what <see cref="IMediaLibrary.GetKeyValueGroups"/> returns as its second map - or null for a library that
+    /// numbered none of them.
+    /// </param>
+    private static IMediaLibrary CreateCountingLibrary(HomogenousMap counted, HomogenousMap numbers,
+        out List<MediaItemAspectMetadata.AttributeSpecification> groupedBy,
+        out List<MediaItemAspectMetadata.AttributeSpecification> keyedBy,
+        out List<ProjectionFunction> projections, out List<IEnumerable<Guid>> necessary)
+    {
       var library = new Mock<IMediaLibrary>(MockBehavior.Strict);
       library.Setup(get => get.GetManagedMediaItemAspectMetadata()).Returns(new Dictionary<Guid, MediaItemAspectMetadata>
       {
@@ -4343,6 +4364,7 @@ namespace Tests.Server.Api
       });
 
       List<MediaItemAspectMetadata.AttributeSpecification> specs = new List<MediaItemAspectMetadata.AttributeSpecification>();
+      List<MediaItemAspectMetadata.AttributeSpecification> keySpecs = new List<MediaItemAspectMetadata.AttributeSpecification>();
       List<ProjectionFunction> proj = new List<ProjectionFunction>();
       List<IEnumerable<Guid>> nec = new List<IEnumerable<Guid>>();
       library.Setup(get => get.GetValueGroups(It.IsAny<MediaItemAspectMetadata.AttributeSpecification>(), null,
@@ -4356,7 +4378,26 @@ namespace Tests.Server.Api
           })
           .Returns(counted);
 
+      // The genre question is the same question with a second attribute asked for beside the counted one, so the
+      // library that can be asked for genres has to be able to answer it - and answer it with the words still
+      // first, which is the shape GetKeyValueGroups hands over and the shape the counting is read from.
+      library.Setup(get => get.GetKeyValueGroups(It.IsAny<MediaItemAspectMetadata.AttributeSpecification>(),
+              It.IsAny<MediaItemAspectMetadata.AttributeSpecification>(), null, It.IsAny<ProjectionFunction>(),
+              It.IsAny<IEnumerable<Guid>>(), null, false, false))
+          .Callback<MediaItemAspectMetadata.AttributeSpecification, MediaItemAspectMetadata.AttributeSpecification,
+              IFilter, ProjectionFunction, IEnumerable<Guid>, IFilter, bool, bool>(
+              (keySpec, valueSpec, sel, projection, necessaryIds, filter, online, virtualItems) =>
+          {
+            keySpecs.Add(keySpec);
+            specs.Add(valueSpec);
+            proj.Add(projection);
+            nec.Add(necessaryIds);
+          })
+          .Returns(new Func<Tuple<HomogenousMap, HomogenousMap>>(() => Tuple.Create(counted,
+              numbers ?? new HomogenousMap(counted.KeyType, typeof(int)))));
+
       groupedBy = specs;
+      keyedBy = keySpecs;
       projections = proj;
       necessary = nec;
       return library.Object;
@@ -4438,6 +4479,173 @@ namespace Tests.Server.Api
       Assert.That(result.Groups[0].Value, Is.EqualTo("Drama"));
       Assert.That(result.Groups[0].Count, Is.EqualTo(5),
           "and the number is the one the database counted, because a page of titles is not a census");
+    }
+
+    [Test]
+    public void AGenreIsCountedByItsWordsAndAnswersItsNumberToo()
+    {
+      HomogenousMap counted = new HomogenousMap(typeof(string), typeof(int));
+      counted.Add("Drama", 5);
+      counted.Add("Adventure", 3);
+      HomogenousMap numbers = new HomogenousMap(typeof(string), typeof(int));
+      numbers.Add("Drama", 18);
+      // "Adventure" is left without a number on purpose: a title imported from a bare filename carries the words
+      // of its genre and never looked the number up, and its row has to arrive rather than be dropped.
+      IMediaLibrary library = CreateCountingLibrary(counted, numbers,
+          out List<MediaItemAspectMetadata.AttributeSpecification> groupedBy,
+          out List<MediaItemAspectMetadata.AttributeSpecification> keyedBy, out _, out _);
+
+      ActionResult<MediaController.GroupsResult> action;
+      MediaController.GroupsResult result = GetGroups(library, "MovieItem", "genre", out action);
+
+      Assert.That(Status(action), Is.Null);
+      Assert.That(keyedBy, Has.Count.EqualTo(1),
+          "a genre's words and its number come out of one question, not two - the reference's own browse screen "
+          + "asks for both at once, and a second query per shelf would only race itself");
+      Assert.That(keyedBy[0], Is.SameAs(GenreAspect.ATTR_ID),
+          "the number asked for beside the words is the one the importer wrote on the title's genre rows");
+      Assert.That(groupedBy[0], Is.SameAs(GenreAspect.ATTR_GENRE),
+          "and the wall is still counted and listed by the words, because words are what a viewer reads");
+
+      MediaController.GroupResult numbered = result.Groups.First(group => group.Value == "Drama");
+      MediaController.GroupResult unnumbered = result.Groups.First(group => group.Value == "Adventure");
+      Assert.That(numbered.Count, Is.EqualTo(5));
+      Assert.That(numbered.Id, Is.EqualTo(18),
+          "the genre answers with the number its library has always called it by, which is the key its picture is "
+          + "filed under: the words of a genre are translated and renamed by importers, its number is not");
+      Assert.That(unnumbered.Id, Is.Null,
+          "a genre the importer wrote without a number is still counted and still listed; it simply has no key a "
+          + "picture of its own could be named after");
+
+      // The number is the genre's, and no other category has one: a name and a year are their own key.
+      HomogenousMap names = new HomogenousMap(typeof(string), typeof(int));
+      names.Add("Liam Neeson", 20);
+      IMediaLibrary creditLibrary = CreateCountingLibrary(names, numbers, out _,
+          out List<MediaItemAspectMetadata.AttributeSpecification> creditsKeyedBy, out _, out _);
+      GetGroups(creditLibrary, "MovieItem", "actors", out _);
+      Assert.That(creditsKeyedBy, Is.Empty,
+          "counting a shelf by its credits asks for no numbers, so counting it stays the one question it was");
+    }
+
+    /// <summary>
+    /// A genre converter that answers from a fixed table of words to numbers and records the questions it was
+    /// asked - standing in for the GenreProvider plugin the reference's importers look genre numbers up with.
+    /// </summary>
+    private class TableGenreConverter : IGenreConverter
+    {
+      private readonly Dictionary<string, int> _byName;
+
+      public TableGenreConverter(Dictionary<string, int> byName)
+      {
+        _byName = byName;
+      }
+
+      /// <summary>The (words, category) pairs the endpoint asked about, in order.</summary>
+      public List<KeyValuePair<string, string>> Asked { get; } = new List<KeyValuePair<string, string>>();
+
+      public bool GetGenreId(string genreName, string genreCategory, string genreCulture, out int genreId)
+      {
+        Asked.Add(new KeyValuePair<string, string>(genreName, genreCategory));
+        return _byName.TryGetValue(genreName, out genreId);
+      }
+
+      public bool GetGenreName(int genreId, string genreCategory, string genreCulture, out string genreName)
+      {
+        genreName = null;
+        return false;
+      }
+
+      public bool GetGenreType(int genreId, string genreCategory, out string genreType)
+      {
+        genreType = null;
+        return false;
+      }
+    }
+
+    [Test]
+    public void AGenreWithoutANumberOnItsRowsIsLookedUpInTheReferenceTable()
+    {
+      HomogenousMap counted = new HomogenousMap(typeof(string), typeof(int));
+      counted.Add("Drama", 5);
+      counted.Add("Abenteuer", 3);
+      counted.Add("Unbekanntes Genre", 1);
+      // The library holds no numbers at all - the state of a library imported before the lookup ran - and the
+      // converter knows the English word and the German one but not the household's own invention.
+      var converter = new TableGenreConverter(new Dictionary<string, int>
+      {
+          { "Drama", 9 },
+          { "Abenteuer", 2 }
+      });
+      ServiceRegistration.Set<IGenreConverter>(converter);
+      IMediaLibrary library = CreateCountingLibrary(counted, null, out _, out _, out _, out _);
+
+      ActionResult<MediaController.GroupsResult> action;
+      MediaController.GroupsResult result = GetGroups(library, "MovieItem", "genre", out action);
+
+      Assert.That(Status(action), Is.Null);
+      Assert.That(result.Groups.First(group => group.Value == "Drama").Id, Is.EqualTo(9),
+          "a genre whose rows carry no number is looked up in the same table the reference's importers used, so "
+          + "the wall gets the numbers the reference would have written");
+      Assert.That(result.Groups.First(group => group.Value == "Abenteuer").Id, Is.EqualTo(2),
+          "and the table matches the words of the languages it knows, which is how a German library ends up with "
+          + "the same pictures as an English one");
+      Assert.That(result.Groups.First(group => group.Value == "Unbekanntes Genre").Id, Is.Null,
+          "a genre the table has no pattern for keeps no number rather than guessing a neighbour's, because a "
+          + "guessed number hangs somebody else's picture on the wall");
+      Assert.That(converter.Asked.Select(question => question.Value).Distinct(),
+          Is.EquivalentTo(new[] { GenreCategory.Movie }),
+          "the films' table answers a films shelf - asking the music table about film genres would match \"Music\" "
+          + "to a record's picture");
+    }
+
+    [Test]
+    public void TheNumbersTheTitlesCarryAreNeverOverruledByTheTable()
+    {
+      HomogenousMap counted = new HomogenousMap(typeof(string), typeof(int));
+      counted.Add("Drama", 5);
+      HomogenousMap numbers = new HomogenousMap(typeof(string), typeof(int));
+      numbers.Add("Drama", 18);
+      var converter = new TableGenreConverter(new Dictionary<string, int> { { "Drama", 9 } });
+      ServiceRegistration.Set<IGenreConverter>(converter);
+      IMediaLibrary library = CreateCountingLibrary(counted, numbers, out _, out _, out _, out _);
+
+      MediaController.GroupsResult result = GetGroups(library, "MovieItem", "genre", out _);
+
+      Assert.That(result.Groups[0].Id, Is.EqualTo(18),
+          "what the titles' own genre rows say outranks any table: the library's number is the one its pictures "
+          + "were filed under");
+      Assert.That(converter.Asked, Is.Empty,
+          "and a genre already numbered is not even asked about");
+    }
+
+    [Test]
+    public void AnAlbumWallIsLookedUpInTheMusicTable()
+    {
+      HomogenousMap counted = new HomogenousMap(typeof(string), typeof(int));
+      counted.Add("Rock", 4);
+      var converter = new TableGenreConverter(new Dictionary<string, int> { { "Rock", 5 } });
+      ServiceRegistration.Set<IGenreConverter>(converter);
+
+      var library = new Mock<IMediaLibrary>(MockBehavior.Strict);
+      library.Setup(get => get.GetManagedMediaItemAspectMetadata()).Returns(new Dictionary<Guid, MediaItemAspectMetadata>
+      {
+          { MediaAspect.ASPECT_ID, MediaAspect.Metadata },
+          { AudioAlbumAspect.ASPECT_ID, AudioAlbumAspect.Metadata },
+          { GenreAspect.ASPECT_ID, GenreAspect.Metadata }
+      });
+      library.Setup(get => get.GetKeyValueGroups(It.IsAny<MediaItemAspectMetadata.AttributeSpecification>(),
+              It.IsAny<MediaItemAspectMetadata.AttributeSpecification>(), It.IsAny<IFilter>(),
+              It.IsAny<ProjectionFunction>(), It.IsAny<IEnumerable<Guid>>(), It.IsAny<IFilter>(), It.IsAny<bool>(),
+              It.IsAny<bool>()))
+          .Returns(new Func<Tuple<HomogenousMap, HomogenousMap>>(() => Tuple.Create(counted,
+              new HomogenousMap(typeof(string), typeof(int)))));
+
+      MediaController.GroupsResult result = GetGroups(library.Object, "AlbumItem", "genre", out _);
+
+      Assert.That(result.Groups[0].Id, Is.EqualTo(5));
+      Assert.That(converter.Asked[0].Value, Is.EqualTo(GenreCategory.Music),
+          "\"Rock\" on an album shelf means the record's picture, and only the music table says so - the same "
+          + "division the importers make when they write the number");
     }
 
     [Test]

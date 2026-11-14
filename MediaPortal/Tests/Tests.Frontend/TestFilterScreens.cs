@@ -24,6 +24,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
+using Avalonia.Controls.Templates;
 using Avalonia.Headless.NUnit;
 using Avalonia.Input;
 using Avalonia.Threading;
@@ -65,6 +66,14 @@ namespace Tests.Frontend
             false, false, null, Array.Empty<AspectAttribute>())));
 
     /// <summary>
+    /// A shelf of music, which is the one shelf counted by the music genres: they are numbered by a table of their
+    /// own, so id 3 is a different genre of music than it is a genre of film.
+    /// </summary>
+    private static readonly HomeSection MUSIC = new HomeSection("Music",
+        new AspectViewModel(new MediaAspect(new Guid("33333333-3333-3333-3333-333333333333"), "AudioItem",
+            false, false, null, Array.Empty<AspectAttribute>())));
+
+    /// <summary>
     /// A year counting whose order is deliberately not sorted by the screen's hand: 2009 has the most titles, the
     /// single 1979 film stands last, and the empty value the database answers with for "no year written" is in
     /// there because the client is what takes it out.
@@ -75,6 +84,17 @@ namespace Tests.Frontend
 
     private const string GENRES = "{\"aspect\":\"MovieItem\",\"by\":\"genre\",\"groups\":["
         + "{\"value\":\"Drama\",\"count\":4},{\"value\":\"Action\",\"count\":2}]}";
+
+    /// <summary>
+    /// The same genre counting with the numbers the library holds the genres under, which is what a library of
+    /// tagged titles answers and what the reference's skin files its genre art by.
+    /// </summary>
+    private const string GENRES_NUMBERED = "{\"aspect\":\"MovieItem\",\"by\":\"genre\",\"groups\":["
+        + "{\"value\":\"Drama\",\"count\":4,\"id\":18},{\"value\":\"Action\",\"count\":2,\"id\":5}]}";
+
+    /// <summary>One numbered genre and one the importer wrote without a number, as a mixed library answers.</summary>
+    private const string GENRES_HALF_NUMBERED = "{\"aspect\":\"MovieItem\",\"by\":\"genre\",\"groups\":["
+        + "{\"value\":\"Drama\",\"count\":4,\"id\":18},{\"value\":\"Adventure\",\"count\":2}]}";
 
     private const string AGES = "{\"aspect\":\"MovieItem\",\"by\":\"age\",\"groups\":["
         + "{\"value\":\"16\",\"count\":40},{\"value\":\"12\",\"count\":7}]}";
@@ -152,6 +172,12 @@ namespace Tests.Frontend
       return new FilterViewModel(server.Client(), MOVIES, by);
     }
 
+    /// <summary>The same screen, stood on another shelf: the counting is one thing and the shelf it counts is another.</summary>
+    private static FilterViewModel ScreenOn(CountingServer server, HomeSection shelf, string by)
+    {
+      return new FilterViewModel(server.Client(), shelf, by);
+    }
+
     private static void Press(Control control, Key key)
     {
       control.RaiseEvent(new KeyEventArgs
@@ -188,6 +214,84 @@ namespace Tests.Frontend
     }
 
     [AvaloniaTest]
+    public void AGenreCarriesThePictureFiledUnderItsNumber()
+    {
+      CountingServer server = new CountingServer(GENRES_NUMBERED);
+      FilterViewModel values = ScreenOn(server, "genre");
+      values.ReadCommand.Execute(null);
+      WaitUntil("the genres to arrive", delegate { return values.Values.Count == 2; });
+
+      Assert.That(values.Values[0].Picture, Is.EqualTo("GenreVideo/Square/18"),
+          "a genre's art is asked for by the number the library holds it under, in the folder the reference's skin "
+          + "files it in: the words of a genre are translated and renamed by importers while its number is what the "
+          + "library has always called it by, which is the only thing a picture can be named after durably");
+      Assert.That(values.Values[1].Picture, Is.EqualTo("GenreVideo/Square/5"));
+      Assert.That(values.ShowsPictures, Is.True,
+          "the wall asks whether its values carry art before it dresses its first tile, so that no square is seen "
+          + "changing its clothes under the viewer");
+    }
+
+    [AvaloniaTest]
+    public void AYearIsItsOwnNumberAndWearsNoPicture()
+    {
+      CountingServer server = new CountingServer();
+      FilterViewModel values = ScreenOn(server);
+      values.ReadCommand.Execute(null);
+      WaitUntil("the years to arrive", delegate { return values.Values.Count == 3; });
+
+      Assert.That(values.Values, Is.All.Property(nameof(BrowseValue.Picture)).Null,
+          "a year is its own key and has no art filed under it; borrowing another value's picture would be a lie "
+          + "about the film, not a decoration");
+      Assert.That(values.ShowsPictures, Is.False, "a wall of years is a wall of words, which is what it always was");
+    }
+
+    [AvaloniaTest]
+    public void AGenreTheLibraryNeverNumberedIsStillCountedAndStandsWithoutArt()
+    {
+      // A library imported from bare filenames carries the words of a genre and never looked its number up. Such a
+      // genre is as browsable as a numbered one; it simply has nothing to ask a picture by.
+      CountingServer server = new CountingServer(GENRES_HALF_NUMBERED);
+      FilterViewModel values = ScreenOn(server, "genre");
+      values.ReadCommand.Execute(null);
+      WaitUntil("the genres to arrive", delegate { return values.Values.Count == 2; });
+
+      Assert.That(values.Values.Select(value => value.Value), Is.EqualTo(new[] { "Drama", "Adventure" }),
+          "the unnumbered genre keeps its tile: a number is a key to a picture, not a right to be listed");
+      Assert.That(values.Values[0].Picture, Is.EqualTo("GenreVideo/Square/18"));
+      Assert.That(values.Values[1].Picture, Is.Null);
+      Assert.That(values.ShowsPictures, Is.True,
+          "the wall is a wall of pictures, and the one value without art stands with the counting's mark on its "
+          + "face - the answer the people wall gives a name whose portrait never arrived");
+    }
+
+    [AvaloniaTest]
+    public void AGenreWallTheSkinHasNoArtForIsStillAWallOfWords()
+    {
+      CountingServer server = new CountingServer(GENRES);
+      FilterViewModel values = ScreenOn(server, "genre");
+      values.ReadCommand.Execute(null);
+      WaitUntil("the genres to arrive", delegate { return values.Values.Count == 2; });
+
+      Assert.That(values.ShowsPictures, Is.False,
+          "with no number to ask by, the wall wears the words it wore before it ever heard of genre art");
+    }
+
+    [AvaloniaTest]
+    public void AWallOfMusicAsksTheMusicGenresArt()
+    {
+      // The music genres are numbered by a table of their own, so the same number means a different genre on the
+      // two shelves; a wall of records wearing the film genres' art would hang the wrong picture on the right word.
+      CountingServer server = new CountingServer(GENRES_NUMBERED);
+      FilterViewModel values = ScreenOn(server, MUSIC, "genre");
+      values.ReadCommand.Execute(null);
+      WaitUntil("the genres to arrive", delegate { return values.Values.Count == 2; });
+
+      Assert.That(values.Values[0].Picture, Is.EqualTo("GenreAudio/Square/18"));
+      Assert.That(server.LastGroupsUrl, Does.Contain("aspect=AudioItem"),
+          "the shelf that is counted is the shelf the art is asked for, and not the films next door");
+    }
+
+    [AvaloniaTest]
     public void TheScreenSaysWhichShelfAndWhichCountingItStandsOn()
     {
       CountingServer server = new CountingServer();
@@ -199,8 +303,158 @@ namespace Tests.Frontend
       Assert.That(genres.Heading, Is.EqualTo("Movies by genre"));
       Assert.That(genres.PluralWord, Is.EqualTo("genres"), "\"2 genre\" would be the screen's own slip");
 
-      Assert.That(years.Subtitle, Does.Contain("press OK"),
-          "a screen that sends the viewer's hand to the arrows explains what the arrows land on before they are pressed");
+      Assert.That(years.CategoryIcon, Is.EqualTo("MediaMenu/year"),
+          "the wall wears the mark the home tile of this counting wore, which is the one place the front end "
+          + "spells out what kind of counting a screen of values is");
+      Assert.That(genres.CategoryIcon, Is.EqualTo("MediaMenu/genre"));
+    }
+
+    [AvaloniaTest]
+    public void TheWallWearsTheShelfsOwnRailAndTheRailSaysWhatThisScreenCanDo()
+    {
+      CountingServer server = new CountingServer();
+      FilterViewModel values = ScreenOn(server);
+      values.ReadCommand.Execute(null);
+      WaitUntil("the years to arrive", delegate { return values.Values.Count == 3; });
+
+      values.ShowMediaMenu();
+
+      Assert.That(values.MediaMenuVisible, Is.True);
+      Assert.That(values.MediaMenuHeading, Is.EqualTo("Menu"),
+          "the commands page is what every rail of this front end opens with, and the rail's walking is written "
+          + "against that word");
+      Assert.That(values.MediaMenu.Select(row => row.Label),
+          Is.EqualTo(new[] { "All Movies", "Filter", "By count", "View" }),
+          "the rail offers what this screen can really do and nothing else: the shelf the counting came out of, "
+          + "the other counting, the order, the shape");
+
+      MediaBrowserMenuEntry filter = values.MediaMenu.First(row => row.Label == "Filter");
+      Assert.That(filter.Detail, Is.EqualTo("Year"), "the row says which counting the wall is wearing");
+
+      // Climbing down over the shape row is what every other rail does: the commands page is left standing behind.
+      filter.Command.Execute(null);
+      Assert.That(values.MediaMenuHeading, Is.EqualTo("Filter"));
+      Assert.That(values.MediaMenu.Select(row => row.Label), Is.EqualTo(new[] { "Genre", "Year" }),
+          "the two countings stand in the order the shelf's own tiles stand them");
+      Assert.That(values.MediaMenu.First(row => row.Label == "Year").IsCurrent, Is.True,
+          "the standing counting is marked as the shelf marks its own current filter");
+    }
+
+    [AvaloniaTest]
+    public void TheCommandsRowForTheWholeShelfHandsOverTheShelfWithoutACut()
+    {
+      CountingServer server = new CountingServer();
+      FilterViewModel values = ScreenOn(server);
+      var opened = new List<HomeSection>();
+      values.ValueChosen += delegate (object? sender, HomeSection shelf) { opened.Add(shelf); };
+
+      values.ReadCommand.Execute(null);
+      WaitUntil("the years to arrive", delegate { return values.Values.Count == 3; });
+
+      values.ShowMediaMenu();
+      values.MediaMenu.First(row => row.Label == "All Movies").Command.Execute(null);
+
+      Assert.That(opened, Has.Count.EqualTo(1));
+      Assert.That(opened[0].By, Is.Null, "the whole shelf carries no cut");
+      Assert.That(opened[0].Label, Is.EqualTo("Movies"));
+      Assert.That(values.MediaMenuVisible, Is.False, "a rail standing over a shelf the viewer just opened is a rail in the way");
+    }
+
+    [AvaloniaTest]
+    public void TheViewPageTurnsTheWallIntoRowsAndBack()
+    {
+      CountingServer server = new CountingServer();
+      FilterViewModel values = ScreenOn(server);
+      values.ReadCommand.Execute(null);
+      WaitUntil("the years to arrive", delegate { return values.Values.Count == 3; });
+
+      values.ShowMediaMenu();
+      values.MediaMenu.First(row => row.Label == "View").Command.Execute(null);
+      Assert.That(values.MediaMenu.Select(row => row.Label), Is.EqualTo(new[] { "List", "Grid", "Details on" }),
+          "the same three answers the shelf's and the people wall's view page gives, in the same order, and the "
+          + "column stands from the first value as it does there");
+      Assert.That(values.MediaMenu.First(row => row.Label == "Grid").IsCurrent, Is.True);
+
+      values.MediaMenu.First(row => row.Label == "List").Command.Execute(null);
+      Assert.That(values.Layout, Is.EqualTo(FilterViewModel.LAYOUT_LIST));
+      Assert.That(values.MediaMenuHeading, Is.EqualTo("View"), "the page stays where the viewer climbed down to");
+      Assert.That(values.MediaMenu.First(row => row.Label == "List").IsCurrent, Is.True);
+
+      values.MediaMenu.First(row => row.Label == "Details on").Command.Execute(null);
+      Assert.That(values.ShowDetails, Is.False);
+      Assert.That(values.MediaMenu.Select(row => row.Label), Does.Contain("Details off"),
+          "a row that answers a switch says which way it stands, as every other row of this front end does");
+    }
+
+    [AvaloniaTest]
+    public void TheSortPageTurnsTheWallAroundWithoutAskingTheServerAgain()
+    {
+      CountingServer server = new CountingServer();
+      FilterViewModel values = ScreenOn(server);
+      values.ReadCommand.Execute(null);
+      WaitUntil("the years to arrive", delegate { return values.Values.Count == 3; });
+      string first_url = server.LastGroupsUrl!;
+
+      values.ShowMediaMenu();
+      values.MediaMenu.First(row => row.Label == "By count").Command.Execute(null);
+      Assert.That(values.MediaMenuHeading, Is.EqualTo("Sort"));
+
+      values.MediaMenu.First(row => row.Label == "By count").Command.Execute(null);
+      Assert.That(values.SortDescending, Is.False, "pressing the standing order again turns it around");
+      Assert.That(values.Values.Select(value => value.Count), Is.EqualTo(new[] { 1, 12, 37 }));
+
+      values.MediaMenu.First(row => row.Label == "By year").Command.Execute(null);
+      Assert.That(values.Values.Select(value => value.Value), Is.EqualTo(new[] { "2009", "1984", "1979" }),
+          "a year reads newest first, which is the end a viewer already knows");
+      Assert.That(server.LastGroupsUrl, Is.EqualTo(first_url),
+          "one answer from the server holds every value of a shelf, so re-ordering it is a question the screen "
+          + "answers for itself rather than one it asks twice");
+    }
+
+    [AvaloniaTest]
+    public void TheFilterPageAsksForTheOtherWallOfTheSameShelf()
+    {
+      CountingServer server = new CountingServer();
+      FilterViewModel values = ScreenOn(server);
+      var asked = new List<string>();
+      values.CountingChosen += delegate (object? sender, string by) { asked.Add(by); };
+
+      values.ReadCommand.Execute(null);
+      WaitUntil("the years to arrive", delegate { return values.Values.Count == 3; });
+
+      values.ShowMediaMenu();
+      values.MediaMenu.First(row => row.Label == "Filter").Command.Execute(null);
+      values.MediaMenu.First(row => row.Label == "Year").Command.Execute(null);
+      Assert.That(asked, Is.Empty, "pressing the counting the wall already wears asks for nothing");
+
+      values.MediaMenu.First(row => row.Label == "Genre").Command.Execute(null);
+      Assert.That(asked, Is.EqualTo(new[] { "genre" }),
+          "the other counting is a wall of its own, so the screen that can build a wall is asked to build it");
+      Assert.That(values.MediaMenuVisible, Is.False);
+    }
+
+    [AvaloniaTest]
+    public void TheColumnOfWordsSpeaksOfTheValueTheCaretStandsOn()
+    {
+      CountingServer server = new CountingServer();
+      FilterViewModel values = ScreenOn(server);
+      values.ReadCommand.Execute(null);
+      WaitUntil("the years to arrive", delegate { return values.Values.Count == 3; });
+
+      Assert.That(values.DetailsName, Is.EqualTo("2009"),
+          "the column names the value the wall stands on, as the shelf's column names the title its caret is on");
+      Assert.That(values.ShowsSideDetails && values.ShowsDetailsWords, Is.True,
+          "the column is up from the first value, which is how a shelf and a wall of names open");
+      Assert.That(values.DetailsFacts.Select(fact => fact.Label), Is.EqualTo(new[] { "Titles", "Shelf" }),
+          "the answers the tile cannot hold stand in the shelf's own pairs");
+      Assert.That(values.DetailsFacts[0].Value, Is.EqualTo("37"));
+      Assert.That(values.ShowsContentInfo, Is.False,
+          "the line at the foot only speaks when the column is turned away");
+
+      values.ShowDetails = false;
+      Assert.That(values.ShowsContentInfo, Is.True);
+      Assert.That(values.ContentInfo, Does.Contain("2009").And.Contain("37 titles"),
+          "the viewer turned the column off, not the knowledge");
     }
 
     [AvaloniaTest]
@@ -376,6 +630,53 @@ namespace Tests.Frontend
 
     #region The wall
 
+    /// <summary>
+    /// The square a value is drawn in is chosen by what the values carry: a genre wall whose genres the library
+    /// numbered is a wall of pictures with a word under each, worn as the people wall wears its portraits, while a
+    /// wall of years keeps the square of words it has always worn.  Both are asked of the same live wall, because
+    /// the choice is made while the counting arrives and not by the markup.
+    /// </summary>
+    [AvaloniaTest]
+    public void AWallWearsTheSquareItsValuesAreDrawnIn()
+    {
+      List<ShellWindow> shown = new List<ShellWindow>();
+      ListBox WallOf(CountingServer server, string by, HomeSection shelf)
+      {
+        FilterViewModel values = ScreenOn(server, shelf, by);
+        var workflow = new WorkflowManager();
+        ShellWindow window = new ShellWindow(workflow, delegate (WorkflowFrame frame)
+        {
+          return new FilterView((FilterViewModel) frame.ViewModel, workflow);
+        });
+        window.Width = 1600;
+        window.Height = 900;
+        workflow.Push(new WorkflowFrame("filter", values.Heading, values));
+        window.Show();
+        WaitUntil("the counting to arrive", delegate { return values.Values.Count > 0; });
+        shown.Add(window);
+        return window.GetVisualDescendants().OfType<ListBox>().First(list => list.Name == "valuesList");
+      }
+
+      ListBox genres = WallOf(new CountingServer(GENRES_NUMBERED), "genre", MOVIES);
+      Assert.That(genres.GetVisualDescendants().OfType<Image>(), Is.Not.Empty,
+          "the genres of a tagged library are drawn as pictures, as the reference drew its genre tiles and as the "
+          + "people wall draws a portrait - the picture is asked of the worn skin by name, so a skin without the "
+          + "art simply leaves the square dark rather than breaking it");
+      Assert.That(
+          genres.GetVisualDescendants().OfType<TextBlock>().Any(word => word.Text == "Drama"), Is.True,
+          "and the word stays under the picture: a wall of pictures whose viewer cannot tell which genre is which "
+          + "is a decoration, not a menu");
+
+      ListBox years = WallOf(new CountingServer(), "year", MOVIES);
+      Assert.That(years.GetVisualDescendants().OfType<Image>(), Is.Empty,
+          "a year has no art filed under it and its wall is the wall of words it always was");
+      Assert.That(
+          years.GetVisualDescendants().OfType<TextBlock>().Any(word => word.Text == "2009"), Is.True);
+
+      foreach (ShellWindow window in shown)
+        window.Close();
+    }
+
     [AvaloniaTest]
     public void TheTilesAreWalkedByTheArrowsAndOpenedByEnter()
     {
@@ -418,6 +719,18 @@ namespace Tests.Frontend
       Press(wall, Key.Up);
       Assert.That(values.Selected!.Value, Is.EqualTo("2009"),
           "at the head of the wall the arrow is nobody's; the caret keeps the tile it stood on");
+
+      // Left off the leading edge of the wall is the road to the screen's own menu here too, and the leading edge
+      // is the whole first column: the rail slides out of the two hundred points that stand off the room's left
+      // hand and the room travels out of its way, which is the shelf's move and the people wall's.
+      Press(wall, Key.Left);
+      Assert.That(values.MediaMenuVisible, Is.True,
+          "the wall's own menu comes out at the wall's leading edge, as the shelf's does");
+      ListBox rail = window.GetVisualDescendants().OfType<ListBox>().First(list => list.Name == "mediaMenuList");
+      WaitUntil("the rail to be dressed", delegate { return rail.Items.Count == 4; });
+
+      Press(rail, Key.Right);
+      Assert.That(values.MediaMenuVisible, Is.False, "and Right hands the caret back to the wall");
 
       Press(wall, Key.Enter);
       Assert.That(opened, Has.Count.EqualTo(1), "OK opens the titles that carry the stood tile");
