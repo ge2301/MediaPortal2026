@@ -25,8 +25,8 @@ namespace MediaPortal.Frontend.Player
   /// </summary>
   /// <remarks>
   /// A row of the settings page is a row of these. Keeping the answer in one place is what lets the page offer
-  /// an engine that is not in the build at all - mpv is named and refused in the same breath, which is truer to
-  /// a viewer than a menu where the word is simply missing.
+  /// an engine that is not in the build at all - it is named and refused in the same breath, which is truer to a
+  /// viewer than a menu where the word is simply missing.
   /// </remarks>
   public sealed class PlayerEngine
   {
@@ -143,7 +143,7 @@ namespace MediaPortal.Frontend.Player
   /// <remarks>
   /// <para>
   /// A list rather than an enumeration because the settings page has to show what cannot be chosen as well as
-  /// what can, and because adding the third engine is meant to be one row here plus its class - nothing in a
+  /// what can, and because adding the next engine is meant to be one row here plus its class - nothing in a
   /// screen is supposed to change when it arrives.
   /// </para>
   /// <para>
@@ -160,9 +160,6 @@ namespace MediaPortal.Frontend.Player
     /// <summary>The key of the engine that listens to itself.</summary>
     public const string BassKey = "bass";
 
-    /// <summary>The key of the engine that is planned and not written.</summary>
-    public const string MpvKey = "mpv";
-
     /// <summary>Every engine a setting may name, in the order a settings page lists them.</summary>
     public static IReadOnlyList<PlayerEngine> All { get; } = new[]
     {
@@ -178,11 +175,7 @@ namespace MediaPortal.Frontend.Player
         if (!BassPlayer.TryCreate(out BassPlayer? player, out string reason, options))
           return PlayerBuild.Refused(reason);
         return PlayerBuild.Made(player!, player!.EngineDescription);
-      }),
-
-      new PlayerEngine(MpvKey, "mpv", true, true, false,
-          "mpv is planned as the third engine and is not in this build. libVLC plays video until then.",
-          null)
+      })
     };
 
     /// <summary>

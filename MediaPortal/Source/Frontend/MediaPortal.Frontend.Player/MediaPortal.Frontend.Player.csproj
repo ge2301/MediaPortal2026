@@ -14,7 +14,7 @@
         into; who owns that window is the host's business, which is why the front end can pass one and a
         headless test can pass none.
       - No LibVLCSharp type crosses the seam: everything above this assembly speaks PlayerState,
-        PlaybackTrack and IVideoPlayer. That is the only reason the engine could be swapped for MPV later
+        PlaybackTrack and IVideoPlayer. That is the only reason an engine could be swapped for another one later
         without touching a single screen.
       - libVLC itself is NOT vendored and NOT downloaded. It is found at run time (see NativeLibraryLocator),
         and a player that cannot find it says so in a sentence instead of throwing a DllNotFoundException.

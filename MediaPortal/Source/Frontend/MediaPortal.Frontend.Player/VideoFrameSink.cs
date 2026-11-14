@@ -343,8 +343,8 @@ namespace MediaPortal.Frontend.Player
     /// <para>
     /// This is the road every producer ends up on. libVLC does not come through here - it is handed the pinned
     /// buffer and writes into it itself, which saves the copy this method makes - but the road is public anyway
-    /// for two good reasons: the next engine (an MPV binding, an Android surface, a hardware decoder that hands
-    /// over bytes rather than pointers) has an engine-free way in, and a screen can be tested with pictures that
+    /// for two good reasons: the next engine (an Android surface, a hardware decoder handing over bytes rather
+    /// than pointers) has an engine-free way in, and a screen can be tested with pictures that
     /// no native library produced, which is the only way the drawing half is ever covered in a container.
     /// </para>
     /// </remarks>

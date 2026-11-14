@@ -254,7 +254,7 @@ public partial class PlaybackSettingsViewModel : ObservableObject
 
   /// <summary>
   /// What an engine row shows: the engine's own name when the machine can build it, and the refusal next to
-  /// the name that ends up playing when it cannot. A row reading "mpv" while another engine made the sound
+  /// the name that ends up playing when it cannot. A row naming one engine while another made the sound
   /// would be showing the file rather than the truth.
   /// </summary>
   private static string EngineLabel(string? stored, string fallbackKey)

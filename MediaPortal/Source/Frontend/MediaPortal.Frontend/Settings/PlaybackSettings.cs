@@ -174,8 +174,8 @@ public sealed class PlaybackSettings
 
   /// <summary>
   /// Which engine plays video, asked on the video player's own page. libVLC is the shipped answer and the only
-  /// one that plays video today; the register already knows the key of the mpv engine that is planned, and a
-  /// file naming it is answered with a sentence rather than a black screen. Unlike the sound engine, this
+  /// one that plays video today; a file naming an engine this build does not have is answered with a sentence
+  /// rather than a black screen. Unlike the sound engine, this
   /// answer is taken at the next start: the window hands its surface to one engine once.
   /// </summary>
   [JsonPropertyName("videoEngine")]
