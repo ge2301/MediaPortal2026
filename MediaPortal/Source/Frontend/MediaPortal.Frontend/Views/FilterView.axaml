@@ -38,9 +38,10 @@
         shelf's rules, which is what makes the ring light under a caret the way a cover of the home wall lights.
 
         THIS is the wall of words, worn when the values have no pictures - every year, and every genre on a skin
-        that carries no art.  The words are then the tile: the value at the tile's own lettering, and the number of
-        titles that justifies the tile standing at all under it.  Both are read from the sofa, which is what the
-        tile's measure and the people wall's are for.
+        that carries no art.  The words are then the tile: the value at the tile's own lettering.  How many titles
+        stand under a value is not written on the tiles - a thousand tiles all shouting their numbers would be a
+        wall read for its figures rather than for its headings - but in the column of words beside the wall, where
+        the stood-on value is said with its counting and, for a genre, with its picture shown large.
       -->
       <DataTemplate x:Key="ValueWallTile" x:DataType="vm:BrowseValue">
         <Border Classes="trackcard person-card home-tile-shadow"
@@ -59,13 +60,6 @@
                          TextTrimming="CharacterEllipsis"
                          Foreground="{DynamicResource TextBrush}"
                          IsHitTestVisible="False"/>
-              <TextBlock Text="{Binding CountText}"
-                         FontSize="15"
-                         Opacity="0.7"
-                         TextAlignment="Center"
-                         TextTrimming="CharacterEllipsis"
-                         Foreground="{DynamicResource TextBrush}"
-                         IsHitTestVisible="False"/>
             </StackPanel>
             <!-- The ring, over the finished edge and drawn last: at rest the skin's ghost of a ring, under a caret
                  full light, by the shelf's own rule for these two classes. -->
@@ -80,8 +74,8 @@
         through, the same ring, and the art growing by the skin's own scale under a caret (ShelfChrome.axaml's
         PersonCardTile, and behind it the reference's own genre tiles, which are a picture with the genre's word
         under it: MediaStyles.xaml's CoverViewVideoGenreFilterItemTemplate).  The measure stays this wall's 205x195,
-        which is the reference's audio grid, and nothing about the card is new: only the word under the picture
-        carries a number as well, because a counting is the one thing a wall of people never had to say.
+        which is the reference's audio grid, and nothing about the card is new: the tile carries the genre's word
+        alone, because its counting and its picture shown large belong to the column of words beside the wall.
 
         A value of such a wall whose number the skin has no art for stands with the counting's mark on its face, as
         a name without a portrait does - the same answer the people wall gives, and the reason the mark and the
@@ -123,13 +117,6 @@
                          TextWrapping="Wrap"
                          TextAlignment="Center"
                          MaxLines="2"
-                         TextTrimming="CharacterEllipsis"
-                         Foreground="{DynamicResource TextBrush}"
-                         IsHitTestVisible="False"/>
-              <TextBlock Text="{Binding CountText}"
-                         FontSize="15"
-                         Opacity="0.7"
-                         TextAlignment="Center"
                          TextTrimming="CharacterEllipsis"
                          Foreground="{DynamicResource TextBrush}"
                          IsHitTestVisible="False"/>
@@ -325,19 +312,36 @@
                   VerticalAlignment="Top"
                   ClipToBounds="True">
               <Grid.RowDefinitions>
+                <!-- The picture the stood-on value is filed under, which is the genre's own art shown as a shelf
+                     shows an album cover: the tile at the wall is its stamp, this is the plate it is looked at on.
+                     It costs a row only on a genre wall that has art; everywhere else the row collapses and the
+                     column reads as it always did. -->
+                <RowDefinition Height="Auto"/>
                 <!-- The head, which is said once: the value, in the shelf's letters for a name. -->
                 <RowDefinition Height="Auto"/>
                 <!-- The row the pairs of answers stand in, under the head. -->
                 <RowDefinition Height="Auto"/>
               </Grid.RowDefinitions>
-              <TextBlock Grid.Row="0"
+              <Border Grid.Row="0"
+                      Classes="person-face"
+                      Width="300"
+                      Height="300"
+                      Margin="0,0,0,18"
+                      ClipToBounds="True"
+                      IsVisible="{Binding ShowsDetailsPicture}">
+                <Image Source="{Binding DetailsPicture,
+                                        Converter={x:Static views:SkinImageConverter.Instance}}"
+                       Stretch="UniformToFill"
+                       IsHitTestVisible="False"/>
+              </Border>
+              <TextBlock Grid.Row="1"
                          Name="detailsName"
                          Text="{Binding DetailsName}"
                          FontSize="45"
                          FontWeight="SemiBold"
                          TextTrimming="CharacterEllipsis"
                          Foreground="{DynamicResource TextBrush}"/>
-              <ItemsControl Grid.Row="1"
+              <ItemsControl Grid.Row="2"
                             Name="detailsFacts"
                             ItemsSource="{Binding DetailsFacts}"
                             ItemTemplate="{StaticResource MediaFactTemplate}"

@@ -387,6 +387,22 @@ namespace MediaPortal.Frontend.ViewModels
     [ObservableProperty]
     private string _detailsName = "";
 
+    /// <summary>
+    /// The name of the picture the stood-on value is filed under, or null when it has none.  The column shows it
+    /// large the way a shelf shows an album cover: at the wall a genre's art is a stamp on its tile, and this is
+    /// where it is looked at.
+    /// </summary>
+    public string? DetailsPicture
+    {
+      get { return Selected?.Picture; }
+    }
+
+    /// <summary>Whether the column has a picture to show, which is only ever true of a numbered genre's wall.</summary>
+    public bool ShowsDetailsPicture
+    {
+      get { return ShowDetails && !string.IsNullOrEmpty(DetailsPicture); }
+    }
+
     /// <summary>What the wall is read by: the server's count, or the value itself.</summary>
     [ObservableProperty]
     private string _sort = SORT_COUNT;
@@ -635,6 +651,7 @@ namespace MediaPortal.Frontend.ViewModels
     {
       OnPropertyChanged(nameof(ShowsSideDetails));
       OnPropertyChanged(nameof(ShowsDetailsWords));
+      OnPropertyChanged(nameof(ShowsDetailsPicture));
       OnPropertyChanged(nameof(ShowsContentInfo));
     }
 
@@ -654,12 +671,15 @@ namespace MediaPortal.Frontend.ViewModels
       if (value != null)
       {
         // The answer and the word under it, in the shelf's own pairs: how many titles carry this value, and which
-        // shelf they were counted out of - the two things a viewer standing on a tile cannot read off it.
+        // shelf they were counted out of - the two things a viewer standing on a tile cannot read off it, because
+        // the tiles themselves carry only their values' words.
         DetailsFacts.Add(new MediaBrowserFact("Titles", value.Count.ToString("N0")));
         DetailsFacts.Add(new MediaBrowserFact("Shelf", Shelf.Label));
       }
 
       OnPropertyChanged(nameof(ShowsDetailsWords));
+      OnPropertyChanged(nameof(DetailsPicture));
+      OnPropertyChanged(nameof(ShowsDetailsPicture));
       OnPropertyChanged(nameof(ContentInfo));
       OnPropertyChanged(nameof(ShowsContentInfo));
     }

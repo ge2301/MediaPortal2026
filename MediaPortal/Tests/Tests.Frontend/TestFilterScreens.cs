@@ -229,6 +229,15 @@ namespace Tests.Frontend
       Assert.That(values.ShowsPictures, Is.True,
           "the wall asks whether its values carry art before it dresses its first tile, so that no square is seen "
           + "changing its clothes under the viewer");
+
+      Assert.That(values.DetailsPicture, Is.EqualTo("GenreVideo/Square/18"),
+          "and the column of words speaks of the stood-on genre's picture too, which is where the art is shown "
+          + "large - the way a shelf shows an album cover rather than a stamp");
+      Assert.That(values.ShowsDetailsPicture, Is.True);
+
+      values.Selected = values.Values[1];
+      Assert.That(values.DetailsPicture, Is.EqualTo("GenreVideo/Square/5"),
+          "the large picture follows the caret the same way the value's name does");
     }
 
     [AvaloniaTest]
@@ -243,6 +252,9 @@ namespace Tests.Frontend
           "a year is its own key and has no art filed under it; borrowing another value's picture would be a lie "
           + "about the film, not a decoration");
       Assert.That(values.ShowsPictures, Is.False, "a wall of years is a wall of words, which is what it always was");
+      Assert.That(values.DetailsPicture, Is.Null,
+          "the column has no picture to show large on a year wall either - only a genre's number names art");
+      Assert.That(values.ShowsDetailsPicture, Is.False);
     }
 
     [AvaloniaTest]
