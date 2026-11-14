@@ -388,9 +388,9 @@ namespace MediaPortal.Frontend.ViewModels
     private string _detailsName = "";
 
     /// <summary>
-    /// The name of the picture the stood-on value is filed under, or null when it has none.  The column shows it
-    /// large the way a shelf shows an album cover: at the wall a genre's art is a stamp on its tile, and this is
-    /// where it is looked at.
+    /// The name of the picture the stood-on value is filed under, or null when it has none.  The column shows it in
+    /// the shelf's own cover frame - the same place, measure and rounding an album's cover wears in the details -
+    /// rather than anywhere the wall invented.
     /// </summary>
     public string? DetailsPicture
     {

@@ -312,36 +312,33 @@
                   VerticalAlignment="Top"
                   ClipToBounds="True">
               <Grid.RowDefinitions>
-                <!-- The picture the stood-on value is filed under, which is the genre's own art shown as a shelf
-                     shows an album cover: the tile at the wall is its stamp, this is the plate it is looked at on.
-                     It costs a row only on a genre wall that has art; everywhere else the row collapses and the
-                     column reads as it always did. -->
-                <RowDefinition Height="Auto"/>
                 <!-- The head, which is said once: the value, in the shelf's letters for a name. -->
                 <RowDefinition Height="Auto"/>
                 <!-- The row the pairs of answers stand in, under the head. -->
                 <RowDefinition Height="Auto"/>
+                <!--
+                  The picture's row, laid exactly as the shelf lays an album's cover (MediaBrowserView's
+                  detailsWords): the writing and the answers own the rows above, and this row is split into the
+                  story's column and a four hundred point picture column at the right hand end, where the shelf
+                  stands its cover - MaxWidth 380, top edge forty lines under the facts, flush with where the
+                  story begins, rounded by ten points on a frame that shrinks to the picture it holds.
+                -->
+                <RowDefinition Height="Auto"/>
               </Grid.RowDefinitions>
-              <Border Grid.Row="0"
-                      Classes="person-face"
-                      Width="300"
-                      Height="300"
-                      Margin="0,0,0,18"
-                      ClipToBounds="True"
-                      IsVisible="{Binding ShowsDetailsPicture}">
-                <Image Source="{Binding DetailsPicture,
-                                        Converter={x:Static views:SkinImageConverter.Instance}}"
-                       Stretch="UniformToFill"
-                       IsHitTestVisible="False"/>
-              </Border>
-              <TextBlock Grid.Row="1"
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="400"/>
+              </Grid.ColumnDefinitions>
+              <TextBlock Grid.Row="0"
+                         Grid.ColumnSpan="2"
                          Name="detailsName"
                          Text="{Binding DetailsName}"
                          FontSize="45"
                          FontWeight="SemiBold"
                          TextTrimming="CharacterEllipsis"
                          Foreground="{DynamicResource TextBrush}"/>
-              <ItemsControl Grid.Row="2"
+              <ItemsControl Grid.Row="1"
+                            Grid.ColumnSpan="2"
                             Name="detailsFacts"
                             ItemsSource="{Binding DetailsFacts}"
                             ItemTemplate="{StaticResource MediaFactTemplate}"
@@ -352,6 +349,28 @@
                   </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
               </ItemsControl>
+              <!--
+                THE GENRE'S PICTURE, worn by the shelf's own cover frame (MediaBrowserView's coverAlone): the same
+                four hundred point column at the right hand end of the picture's row, the same MaxWidth and top
+                margin of forty, the same right alignment, the same ten points of rounding on a frame that shrinks
+                to its picture.  A genre's art is square, so what arrives is the album's measure rather than a
+                poster's; nothing about this frame is the wall's own invention.
+              -->
+              <Border Name="genrePicture"
+                      Grid.Row="2"
+                      Grid.Column="1"
+                      MaxWidth="380"
+                      MaxHeight="500"
+                      Margin="20,40,0,0"
+                      HorizontalAlignment="Right"
+                      VerticalAlignment="Top"
+                      CornerRadius="10"
+                      ClipToBounds="True"
+                      IsVisible="{Binding ShowsDetailsPicture}">
+                <Image Source="{Binding DetailsPicture,
+                                        Converter={x:Static views:SkinImageConverter.Instance}}"
+                       Stretch="Uniform"/>
+              </Border>
             </Grid>
           </Border>
         </Grid>
