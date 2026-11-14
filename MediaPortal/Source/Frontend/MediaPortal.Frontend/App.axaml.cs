@@ -1695,6 +1695,16 @@ namespace MediaPortal.Frontend
             delegate (HomeSection section) { return BrowserFrame(section); });
       }
 
+      if (state == "filter")
+      {
+        // One counting of one shelf on a screen of its own, opened from a shelf's own shortcut tile. A pressed
+        // value opens the ordinary shelf cut to it - through the same door every other road to a shelf walks, so
+        // the cut shelf remembers its order and its shape like the whole one does - and it is pushed as its own
+        // stop, which is what leads the way back out of the titles onto the value that was pressed.
+        return new FilterView((FilterViewModel)frame.ViewModel, _workflow,
+            delegate (HomeSection section) { return BrowserFrame(section); });
+      }
+
       if (state == "tvguide" || state == "radioguide")
         return new TvGuideView((TvGuideViewModel)frame.ViewModel, _workflow);
 

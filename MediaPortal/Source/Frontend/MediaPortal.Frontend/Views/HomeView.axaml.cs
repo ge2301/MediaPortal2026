@@ -2057,18 +2057,36 @@ namespace MediaPortal.Frontend.Views
         return;
       }
 
+      // The countings a shortcut tile asks for are answered on a screen of their own, the way the walls of people
+      // are answered on theirs: the tile has already said which shelf and which counting, and answering that with
+      // the whole shelf plus a menu makes the viewer say the same thing twice, one screen deeper.  The age rating
+      // is the one counting that stays in the shelf's own sidebar - a whole household answers it with half a dozen
+      // values, which is a row of a menu and not a screen - so its tile opens the shelf with that sidebar stood
+      // open on its values, which is as far as a screen of its own was ever worth going.
       if (shortcut.BrowseBy != null && _home.SelectedEntry?.Section is HomeSection section)
       {
-        BrowseCategory? category = BrowseViewModel.CATEGORIES.FirstOrDefault(candidate =>
-            string.Equals(candidate.Word, shortcut.BrowseBy, StringComparison.OrdinalIgnoreCase));
-        if (category != null)
+        if (_home.Client != null && FilterViewModel.OwnsItsOwnScreen(shortcut.BrowseBy))
         {
-          BrowseViewModel browse = new BrowseViewModel(_home.Client, new[] { section })
-          {
-            SelectedCategory = category
-          };
-          _workflow.Push(new WorkflowFrame("browse", "Browse " + shortcut.Label, browse));
+          FilterViewModel values = new FilterViewModel(_home.Client, section, shortcut.BrowseBy);
+          _workflow.Push(new WorkflowFrame("filter", values.Heading, values));
           return;
+        }
+
+        if (FilterViewModel.StandsInTheShelfsSidebar(shortcut.BrowseBy))
+        {
+          WorkflowFrame? shelfFrame = _sectionScreen?.Invoke(section);
+          if (shelfFrame?.ViewModel is MediaBrowserViewModel shelf)
+          {
+            // The shelf first, its sidebar after: a screen answers the opening of its own menu - it slides the
+            // room back and moves the caret into the panel - and a screen that is not stood on the screen yet
+            // answers that with nothing, which would leave the viewer on the rows with a panel shut in front of
+            // them.  The menu's first page is what opening it builds, so the count of the values follows it onto
+            // the second page rather than being overwritten by it.
+            _workflow.Push(shelfFrame);
+            shelf.ShowMediaMenu();
+            _ = shelf.ShowFilterValuesAsync(shortcut.BrowseBy);
+            return;
+          }
         }
       }
 

@@ -1,0 +1,90 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MediaPortal.Frontend.ViewModels"
+        x:Class="MediaPortal.Frontend.Views.FilterView"
+        x:DataType="vm:FilterViewModel"
+        Name="filter"
+        Background="Transparent"
+        >
+
+  <!--
+    One counting of one shelf, stood on a screen of its own: every year (or every genre) the titles of that shelf
+    carry, one tile each, with the server's number under the value. The tiles are the point of the screen - the
+    viewer came here to choose one - so they are laid as the walls lay their tiles and not as rows of a table, and
+    the words above and below are the two sentences that explain what a press does.
+
+    The wall is the shelf's own list, dressed by the shelf's own classes, for the same reason the people's wall
+    is: everything a wall of tiles has to be - walked by a caret, virtualized by a thousand rows, laid in the
+    panel that wraps whole tiles and dresses the stood one - is what that control already is.
+  -->
+
+  <UserControl.Resources>
+    <DataTemplate x:Key="FilterWallTile" x:DataType="vm:BrowseValue">
+      <Border Classes="home-tile-shadow"
+              Width="205"
+              Height="120"
+              Margin="8,8,8,14"
+              Background="#222222"
+              CornerRadius="10"
+              Focusable="True">
+        <Panel>
+          <StackPanel VerticalAlignment="Center" Spacing="4" Margin="10,8">
+            <!-- The value is the tile: a year is four figures and a genre is a word, and both have to be read from
+                 the sofa, so the figure carries the tile and the number that justifies it sits under it. -->
+            <TextBlock Text="{Binding Value}"
+                       FontSize="30"
+                       FontWeight="SemiBold"
+                       TextWrapping="Wrap"
+                       TextAlignment="Center"
+                       MaxLines="2"
+                       TextTrimming="CharacterEllipsis"
+                       HorizontalAlignment="Center"
+                       Foreground="{DynamicResource TextBrush}"
+                       IsHitTestVisible="False"/>
+            <TextBlock Text="{Binding CountText}"
+                       FontSize="15"
+                       Opacity="0.7"
+                       TextAlignment="Center"
+                       HorizontalAlignment="Center"
+                       Foreground="{DynamicResource TextBrush}"
+                       IsHitTestVisible="False"/>
+          </StackPanel>
+          <!-- The ring, over the finished edge: the skin's ghost of one at rest, full light under a caret. -->
+          <Border Classes="home-tile-edge" IsHitTestVisible="False"/>
+        </Panel>
+      </Border>
+    </DataTemplate>
+  </UserControl.Resources>
+
+  <DockPanel Margin="48,36">
+
+    <StackPanel DockPanel.Dock="Top" Spacing="2" Margin="0,0,0,20">
+      <TextBlock Text="{Binding Heading}" FontSize="40" FontWeight="SemiBold"/>
+      <TextBlock Text="{Binding Subtitle}"
+                 FontSize="18"
+                 Opacity="0.7"
+                 TextWrapping="Wrap"
+                 MaxWidth="1500"
+                 HorizontalAlignment="Left" />
+    </StackPanel>
+
+    <TextBlock DockPanel.Dock="Bottom"
+               Name="statusLine"
+               Text="{Binding Status}"
+               FontSize="20"
+               Opacity="0.85"
+               Margin="0,18,0,0"
+               TextWrapping="Wrap" />
+
+    <ListBox Name="valuesList"
+             Classes="nereus-shelf-tiles"
+             Focusable="True"
+             ItemsSource="{Binding Values}"
+             SelectedItem="{Binding Selected, Mode=TwoWay}"
+             ItemTemplate="{StaticResource FilterWallTile}"
+             FontSize="24"
+             ScrollViewer.VerticalScrollBarVisibility="Hidden"
+             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+             ClipToBounds="False"/>
+  </DockPanel>
+</UserControl>

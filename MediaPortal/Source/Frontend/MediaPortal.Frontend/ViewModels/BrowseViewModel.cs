@@ -61,10 +61,18 @@ namespace MediaPortal.Frontend.ViewModels
     /// <summary>How many titles in this shelf carry it, counted by the server rather than guessed at here.</summary>
     public int Count { get; }
 
+    /// <summary>
+    /// The number on its own, in the words a tile writes under the value it counted.
+    /// </summary>
+    public string CountText
+    {
+      get { return Count.ToString("N0") + (Count == 1 ? " title" : " titles"); }
+    }
+
     /// <summary>How the row reads: the value, and the number that justifies it being a row at all.</summary>
     public string Text
     {
-      get { return Value + "  ·  " + Count.ToString("N0") + (Count == 1 ? " title" : " titles"); }
+      get { return Value + "  ·  " + CountText; }
     }
   }
 
