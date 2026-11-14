@@ -1,4 +1,4 @@
-#region Copyright (C) 2007-2020 Team MediaPortal
+﻿#region Copyright (C) 2007-2020 Team MediaPortal
 
 /*
     Copyright (C) 2007-2020 Team MediaPortal
@@ -24,6 +24,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Claims;
@@ -4451,6 +4452,14 @@ namespace Tests.Server.Api
               (necessary, filter, online, virtualItems) => counted.Add(filter))
           .Returns(0);
 
+      // The genre door asks which spellings the pressed heading's number holds before it opens, and a shelf
+      // library that was never asked to count genres has no numbers to answer with - the word alone then asks.
+      library.Setup(get => get.GetKeyValueGroups(It.IsAny<MediaItemAspectMetadata.AttributeSpecification>(),
+              It.IsAny<MediaItemAspectMetadata.AttributeSpecification>(), It.IsAny<IFilter>(),
+              It.IsAny<ProjectionFunction>(), It.IsAny<IEnumerable<Guid>>(), It.IsAny<IFilter>(), It.IsAny<bool>(),
+              It.IsAny<bool>()))
+          .Returns((Tuple<HomogenousMap, HomogenousMap>) null);
+
       queries = asked;
       countedThrough = counted;
       return library.Object;
@@ -4525,6 +4534,118 @@ namespace Tests.Server.Api
       GetGroups(creditLibrary, "MovieItem", "actors", out _);
       Assert.That(creditsKeyedBy, Is.Empty,
           "counting a shelf by its credits asks for no numbers, so counting it stays the one question it was");
+    }
+
+    [Test]
+    public void SpellingsOfOneGenreNumberStandAsOneGroupUnderTheUsualSpelling()
+    {
+      HomogenousMap counted = new HomogenousMap(typeof(string), typeof(int));
+      counted.Add("Hip Hop", 4);
+      counted.Add("Rap", 7);
+      counted.Add("Hip-Hop", 2);
+      HomogenousMap numbers = new HomogenousMap(typeof(string), typeof(int));
+      numbers.Add("Hip Hop", 9);
+      numbers.Add("Rap", 9);
+      numbers.Add("Hip-Hop", 9);
+      IMediaLibrary library = CreateCountingLibrary(counted, numbers, out _, out _, out _, out _);
+
+      MediaController.GroupsResult result = GetGroups(library, "MovieItem", "genre", out _);
+
+      Assert.That(result.Groups, Has.Count.EqualTo(1),
+          "one number is one heading - the reference merges a genre's spellings on its number before it shows a "
+          + "word (FilterByGenreCriterion), because three tiles wearing one picture read as a broken wall");
+      MediaController.GroupResult rap = result.Groups[0];
+      Assert.That(rap.Id, Is.EqualTo(9));
+      Assert.That(rap.Count, Is.EqualTo(13), "and the merged heading counts every spelling's titles");
+      Assert.That(rap.Value, Is.EqualTo("Rap"),
+          "the heading wears the spelling the most titles carry, because that is the word the library settled on");
+    }
+
+    [Test]
+    public void EqualSpellingsOfAGenreBreakTheirTieByTheAlphabet()
+    {
+      HomogenousMap counted = new HomogenousMap(typeof(string), typeof(int));
+      counted.Add("Sci-Fi", 3);
+      counted.Add("Science Fiction", 3);
+      HomogenousMap numbers = new HomogenousMap(typeof(string), typeof(int));
+      numbers.Add("Sci-Fi", 15);
+      numbers.Add("Science Fiction", 15);
+      IMediaLibrary library = CreateCountingLibrary(counted, numbers, out _, out _, out _, out _);
+
+      MediaController.GroupsResult result = GetGroups(library, "MovieItem", "genre", out _);
+
+      Assert.That(result.Groups.Single().Value, Is.EqualTo("Sci-Fi"),
+          "when the library spells a genre just as often both ways, the alphabet decides - the same tie-break the "
+          + "wall's own order obeys");
+    }
+
+    [Test]
+    public void AGenreWithoutANumberNeverMergesWithItsNumberedNeighbours()
+    {
+      HomogenousMap counted = new HomogenousMap(typeof(string), typeof(int));
+      counted.Add("Drama", 5);
+      // "Dramatik" is a household's own word the table does not know: it shares Drama's picture by nobody's say-so
+      // and must keep its own row rather than vanish into a heading whose art is not its own.
+      counted.Add("Dramatik", 2);
+      HomogenousMap numbers = new HomogenousMap(typeof(string), typeof(int));
+      numbers.Add("Drama", 8);
+      IMediaLibrary library = CreateCountingLibrary(counted, numbers, out _, out _, out _, out _);
+
+      MediaController.GroupsResult result = GetGroups(library, "MovieItem", "genre", out _);
+
+      Assert.That(result.Groups, Has.Count.EqualTo(2),
+          "only a shared number merges two spellings; an unnumbered word stands on its own");
+      Assert.That(result.Groups.First(group => group.Value == "Dramatik").Id, Is.Null);
+    }
+
+    [Test]
+    public void ARowNamingSeveralGenresCountsUnderEachOfThem()
+    {
+      // Some importers packed several genres into one field - "Schlager, Pop" - where the reference's extractors
+      // would have split at a separator. The wall reads such a row as belonging to every genre it names, the way
+      // the reference's browse screen shows the title under each of its genres.
+      HomogenousMap counted = new HomogenousMap(typeof(string), typeof(int));
+      counted.Add("Pop", 341);
+      counted.Add("Schlager, Pop", 43);
+      HomogenousMap numbers = new HomogenousMap(typeof(string), typeof(int));
+      numbers.Add("Pop", 3);
+      numbers.Add("Schlager", 12);
+      IMediaLibrary library = CreateCountingLibrary(counted, numbers, out _, out _, out _, out _);
+
+      MediaController.GroupsResult result = GetGroups(library, "MovieItem", "genre", out _);
+
+      Assert.That(result.Groups.First(group => group.Value == "Pop").Count, Is.EqualTo(384),
+          "a row that says 'Schlager, Pop' carries forty-three titles that are Pop as much as Schlager, so the "
+          + "Pop heading counts them too");
+      Assert.That(result.Groups.First(group => group.Value == "Schlager").Count, Is.EqualTo(43));
+      Assert.That(result.Groups.First(group => group.Value == "Schlager").Id, Is.EqualTo(12));
+      Assert.That(result.Groups, Has.None.Property("Value").EqualTo("Schlager, Pop"),
+          "and the packed row itself never stands as a heading of its own");
+    }
+
+    [Test]
+    public void TheWordsOfAPackedRowAreNumberedThroughTheTableWhenItsRowCarriesNoNumber()
+    {
+      // The importer wrote neither numbers nor separators, only "Dance, Club, Pop, RnB". Each word is looked up
+      // in the reference's table on its own, so the packed row feeds four numbered headings instead of one blank.
+      HomogenousMap counted = new HomogenousMap(typeof(string), typeof(int));
+      counted.Add("Dance, Club, Pop, RnB", 27);
+      var converter = new TableGenreConverter(new Dictionary<string, int>
+      {
+          { "Dance", 30 },
+          { "Club", 31 },
+          { "Pop", 3 },
+      });
+      ServiceRegistration.Set<IGenreConverter>(converter);
+      IMediaLibrary library = CreateCountingLibrary(counted, null, out _, out _, out _, out _);
+
+      MediaController.GroupsResult result = GetGroups(library, "MovieItem", "genre", out _);
+
+      Assert.That(result.Groups.First(group => group.Value == "Dance").Id, Is.EqualTo(30));
+      Assert.That(result.Groups.First(group => group.Value == "Pop").Id, Is.EqualTo(3));
+      Assert.That(result.Groups.First(group => group.Value == "Pop").Count, Is.EqualTo(27));
+      Assert.That(result.Groups.First(group => group.Value == "RnB").Id, Is.Null,
+          "a word the table has no pattern for keeps its own unnumbered row rather than guessing");
     }
 
     /// <summary>
@@ -4897,6 +5018,138 @@ namespace Tests.Server.Api
       Assert.That(countedThrough[0], Is.SameAs(queries[0].Filter),
           "and the total is counted through the very same filter, so a screen reads '12 of 12 Action films' and "
           + "not '12 of the whole shelf'");
+    }
+
+    [Test]
+    public void TheTitlesOfAMergedGenreAreAskedForByEverySpellingUnderItsNumber()
+    {
+      List<MediaItemQuery> queries;
+      HomogenousMap counted = new HomogenousMap(typeof(string), typeof(int));
+      counted.Add("Rap", 153);
+      counted.Add("Hip Hop", 32);
+      counted.Add("Hip-Hop", 27);
+      counted.Add("Pop", 341);
+      HomogenousMap numbers = new HomogenousMap(typeof(string), typeof(int));
+      numbers.Add("Rap", 9);
+      numbers.Add("Hip Hop", 9);
+      numbers.Add("Hip-Hop", 9);
+      numbers.Add("Pop", 3);
+      IMediaLibrary library = CreateSpellingsLibrary(counted, numbers, out queries);
+
+      ActionResult<MediaController.TitlesResult> action;
+      GetTitlesInGroup(library, "MovieItem", "genre", "Rap", out action);
+
+      Assert.That(Status(action), Is.Null);
+      InFilter condition = (InFilter)queries[0].Filter;
+      Assert.That(condition.AttributeType, Is.SameAs(GenreAspect.ATTR_GENRE));
+      Assert.That(SpellingValues(condition), Is.EquivalentTo(new[] { "Rap", "Hip Hop", "Hip-Hop" }),
+          "the heading 'Rap' merged three spellings on one number when it was counted, so the titles under the "
+          + "heading have to be asked for by all three - asking only the pressed word would open a shelf missing "
+          + "half the genre");
+    }
+
+    [Test]
+    public void AHeadingWhoseRowsCarryNoNumbersGetsThemFromTheReferenceTable()
+    {
+      // The state of a library whose importer never wrote GENREID: GetKeyValueGroups answers with rows whose
+      // numbers are all absent. The wall numbered its headings through the converter; the titles door has to
+      // reach the same numbers the same way or the merge seen on the wall cannot be honoured below it.
+      List<MediaItemQuery> queries;
+      var converter = new TableGenreConverter(new Dictionary<string, int>
+      {
+          { "Rap", 9 },
+          { "Hip Hop", 9 },
+          { "Pop", 3 },
+      });
+      ServiceRegistration.Set<IGenreConverter>(converter);
+      HomogenousMap counted = new HomogenousMap(typeof(string), typeof(int));
+      counted.Add("Rap", 153);
+      counted.Add("Hip Hop", 32);
+      counted.Add("Pop", 341);
+      IMediaLibrary library = CreateSpellingsLibrary(counted,
+          new HomogenousMap(typeof(string), typeof(int)), out queries);
+
+      ActionResult<MediaController.TitlesResult> action;
+      GetTitlesInGroup(library, "MovieItem", "genre", "Rap", out action);
+
+      Assert.That(Status(action), Is.Null);
+      InFilter condition = (InFilter)queries[0].Filter;
+      Assert.That(SpellingValues(condition), Is.EquivalentTo(new[] { "Rap", "Hip Hop" }),
+          "without numbers on the rows, the words sharing the pressed heading's number come from the same table "
+          + "the wall's counting fell back to");
+      Assert.That(converter.Asked.Select(question => question.Value).Distinct(),
+          Is.EquivalentTo(new[] { GenreCategory.Movie }),
+          "and the films' table answers a films shelf here exactly as it does when the wall counts");
+    }
+
+    [Test]
+    public void TheTitlesOfAHeadingAlsoComeFromTheRowsThatPackSeveralGenres()
+    {
+      // The wall counted "Schlager, Pop" under both headings, so pressing either heading has to find those
+      // titles. Equality on the single word can never match the packed field, so the packed row's whole field
+      // travels with the plain word as its own equality.
+      List<MediaItemQuery> queries;
+      HomogenousMap counted = new HomogenousMap(typeof(string), typeof(int));
+      counted.Add("Pop", 341);
+      counted.Add("Schlager, Pop", 43);
+      HomogenousMap numbers = new HomogenousMap(typeof(string), typeof(int));
+      numbers.Add("Pop", 3);
+      numbers.Add("Schlager", 12);
+      IMediaLibrary library = CreateSpellingsLibrary(counted, numbers, out queries);
+
+      ActionResult<MediaController.TitlesResult> action;
+      GetTitlesInGroup(library, "MovieItem", "genre", "Schlager", out action);
+
+      Assert.That(Status(action), Is.Null);
+      BooleanCombinationFilter combined = (BooleanCombinationFilter)queries[0].Filter;
+      Assert.That(combined.Operator, Is.EqualTo(BooleanOperator.Or));
+      List<string> askedFor = combined.Operands.OfType<RelationalFilter>()
+          .Select(entry => Convert.ToString(entry.FilterValue, CultureInfo.InvariantCulture)).ToList();
+      Assert.That(askedFor, Is.EquivalentTo(new[] { "Schlager", "Schlager, Pop" }),
+          "the heading's own word and every packed row that names it are asked for - a title tagged 'Schlager, "
+          + "Pop' stands under the Schlager heading the wall counted it into");
+    }
+
+    /// <summary>
+    /// The words an <see cref="InFilter"/> over genre strings asks for, whatever boxing it holds them in.
+    /// </summary>
+    private static List<string> SpellingValues(InFilter filter)
+    {
+      return filter.Values.Select(value => Convert.ToString(value, CultureInfo.InvariantCulture)).ToList();
+    }
+
+    /// <summary>
+    /// A shelf library that can answer the spelling question <see cref="MediaController.GetTitles"/> asks before
+    /// opening a genre heading: it holds the genre rows with their counts and the numbers beside them.
+    /// </summary>
+    /// <param name="counted">The genre words and how many titles carry each.</param>
+    /// <param name="numbers">The numbers the rows carried; an empty map stands for a library that numbered none.</param>
+    private static IMediaLibrary CreateSpellingsLibrary(HomogenousMap counted, HomogenousMap numbers,
+        out List<MediaItemQuery> queries)
+    {
+      var library = new Mock<IMediaLibrary>(MockBehavior.Strict);
+      library.Setup(get => get.GetManagedMediaItemAspectMetadata()).Returns(new Dictionary<Guid, MediaItemAspectMetadata>
+      {
+          { MediaAspect.ASPECT_ID, MediaAspect.Metadata },
+          { MovieAspect.ASPECT_ID, MovieAspect.Metadata },
+          { GenreAspect.ASPECT_ID, GenreAspect.Metadata },
+          { VideoAspect.ASPECT_ID, VideoAspect.Metadata }
+      });
+
+      List<MediaItemQuery> asked = new List<MediaItemQuery>();
+      library.Setup(get => get.Search(It.IsAny<MediaItemQuery>(), false, null, false))
+          .Callback<MediaItemQuery, bool, Guid?, bool>((query, online, profile, virtualItems) => asked.Add(query))
+          .Returns(new List<MediaItem>());
+      library.Setup(get => get.CountMediaItems(It.IsAny<IEnumerable<Guid>>(), It.IsAny<IFilter>(), false, false))
+          .Returns(0);
+      library.Setup(get => get.GetKeyValueGroups(It.IsAny<MediaItemAspectMetadata.AttributeSpecification>(),
+              It.IsAny<MediaItemAspectMetadata.AttributeSpecification>(), It.IsAny<IFilter>(),
+              It.IsAny<ProjectionFunction>(), It.IsAny<IEnumerable<Guid>>(), It.IsAny<IFilter>(), It.IsAny<bool>(),
+              It.IsAny<bool>()))
+          .Returns(new Func<Tuple<HomogenousMap, HomogenousMap>>(() => Tuple.Create(counted, numbers)));
+
+      queries = asked;
+      return library.Object;
     }
 
     [Test]

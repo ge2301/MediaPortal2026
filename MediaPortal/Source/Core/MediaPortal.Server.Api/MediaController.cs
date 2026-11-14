@@ -1,4 +1,4 @@
-#region Copyright (C) 2007-2020 Team MediaPortal
+﻿#region Copyright (C) 2007-2020 Team MediaPortal
 
 /*
     Copyright (C) 2007-2020 Team MediaPortal
@@ -1025,7 +1025,6 @@ namespace MediaPortal.Server.Api
             });
           askedBy = known;
           askedValue = picked;
-
           if (known.Equals("year", StringComparison.OrdinalIgnoreCase))
           {
             // A year is not a value that stands in the database - what stands there is a date and time - so the
@@ -1068,6 +1067,86 @@ namespace MediaPortal.Server.Api
                     + "from GET api/media/groups?by=age"
               });
             groupFilter = new InFilter(spec, marks);
+          }
+          else if (known.Equals("genre", StringComparison.OrdinalIgnoreCase))
+          {
+            // A counted genre heading is the usual spelling of its number, and every title under that heading goes
+            // by one of its spellings - "Rap" on a heading stands for the titles tagged "Rap", "Hip Hop" and
+            // "Hip-Hop" alike, because the wall merged them on their number the way the reference's browse screen
+            // does. Asking the database back for just the heading's word would open an empty shelf under two of
+            // the library's three spellings, so the words that count toward this heading's number are looked up
+            // first and asked for as they were counted: by their words, through the same rows. A row naming
+            // several genres at once ("Schlager, Pop") belongs to each of them, which the database cannot be
+            // asked about directly - equality on a word misses the packed row - so such rows are found here and
+            // searched by their whole field beside the plain words. A library whose rows carry no numbers (the
+            // importer never wrote GENREID) gets its numbers from the same converter the wall's counting falls
+            // back to, so both sides of the wall agree on which words share a number.
+            List<string> exactWords = new List<string> { picked };
+            List<string> packedRows = new List<string>();
+            try
+            {
+              Tuple<HomogenousMap, HomogenousMap> numbered = mediaLibrary.GetKeyValueGroups(
+                  GenreAspect.ATTR_ID, spec, null, ProjectionFunction.None, necessary, null, false,
+                  VirtualTitles.ShowsVirtualFor(necessary));
+              if (numbered != null && numbered.Item1 != null)
+              {
+                HomogenousMap splitCounted = new HomogenousMap(numbered.Item1.KeyType, typeof(int));
+                foreach (KeyValuePair<object, object> row in numbered.Item1)
+                {
+                  if (row.Key == null || row.Key.Equals(HomogenousMap.NULL))
+                    continue;
+                  string named = Convert.ToString(row.Key, CultureInfo.InvariantCulture);
+                  if (string.IsNullOrWhiteSpace(named))
+                    continue;
+                  foreach (string word in SplitGenreWords(named))
+                    splitCounted[word] = 1;
+                }
+                HomogenousMap numbers = NumberedGenres(splitCounted, numbered.Item2, aspectId);
+                int? pickedId = NumberOf(numbers, picked);
+                foreach (KeyValuePair<object, object> row in numbered.Item1)
+                {
+                  if (row.Key == null || row.Key.Equals(HomogenousMap.NULL))
+                    continue;
+                  string named = Convert.ToString(row.Key, CultureInfo.InvariantCulture);
+                  if (string.IsNullOrWhiteSpace(named))
+                    continue;
+                  List<string> words = SplitGenreWords(named);
+                  bool holdsHeading = false;
+                  foreach (string word in words)
+                  {
+                    int? number = NumberOf(numbers, word);
+                    // Without a number on either side, only the very word pressed counts; a numbered heading
+                    // gathers every spelling whose number matches, including itself.
+                    bool same = pickedId.HasValue ? number == pickedId : word == picked;
+                    if (!same)
+                      continue;
+                    holdsHeading = true;
+                    if (words.Count == 1 && !exactWords.Contains(word, StringComparer.Ordinal))
+                      exactWords.Add(word);
+                  }
+                  // A packed row answers to the heading too, but only equality on its whole field finds it.
+                  if (holdsHeading && words.Count > 1 && !packedRows.Contains(named, StringComparer.Ordinal))
+                    packedRows.Add(named);
+                }
+              }
+            }
+            catch (IllegalCallException)
+            {
+              // A library mid-maintenance cannot answer the spelling question; the pressed word alone still asks
+              // the ordinary question below, which is what it always did.
+            }
+            // The plain spellings are asked for as the set they are; a packed row that belongs to the heading is
+            // added as its own equality, because no IN over words can ever match "Schlager, Pop" whole.
+            List<IFilter> headingFilters = new List<IFilter>();
+            if (exactWords.Count == 1)
+              headingFilters.Add(new RelationalFilter(spec, RelationalOperator.EQ, exactWords[0]));
+            else
+              headingFilters.Add(new InFilter(spec, exactWords));
+            foreach (string packed in packedRows)
+              headingFilters.Add(new RelationalFilter(spec, RelationalOperator.EQ, packed));
+            groupFilter = headingFilters.Count == 1
+                ? headingFilters[0]
+                : BooleanCombinationFilter.CombineFilters(BooleanOperator.Or, headingFilters);
           }
           else
           {
@@ -1572,6 +1651,73 @@ namespace MediaPortal.Server.Api
               Count = years.Value
             });
         }
+        else if (countingGenres)
+        {
+          // Genres are merged on their number before a word is ever shown - the reference's own arrangement
+          // (FilterByGenreCriterion groups on the genre id and translates back afterwards): "Hip Hop", "Rap" and
+          // "Hip-Hop" are three spellings of one heading, and a wall that listed each spelling separately would
+          // stand three tiles wearing one picture. The counting came in by words because that is what the database
+          // groups on, so the words' counts are read through the numbers here.
+          //
+          // A row can also carry several genres in one field - "Schlager, Pop", "Dance, Club, Pop, RnB" - which is
+          // how the reference's extractors wrote them before any separator was configured. Such a row belongs to
+          // every genre named in it, so its count is shared out over the words it lists; a title tagged with two
+          // genres then stands under both headings, exactly as it does in the reference's browse screen.
+          List<KeyValuePair<string, int>> rows = new List<KeyValuePair<string, int>>();
+          foreach (KeyValuePair<object, object> entry in counted)
+          {
+            // As everywhere else, "nothing written here" is no category a viewer came to browse.
+            if (entry.Key == null || entry.Key.Equals(HomogenousMap.NULL) || entry.Value == null)
+              continue;
+            string named = Convert.ToString(entry.Key, CultureInfo.InvariantCulture);
+            if (string.IsNullOrWhiteSpace(named))
+              continue;
+            int count = Convert.ToInt32(entry.Value, CultureInfo.InvariantCulture);
+            foreach (string word in SplitGenreWords(named))
+              rows.Add(new KeyValuePair<string, int>(word, count));
+          }
+
+          // The split words are not the keys the numbers were looked up under, so the numbering is asked for the
+          // words themselves: a library whose rows said only "Schlager, Pop" gets both halves numbered now.
+          HomogenousMap splitCounted = new HomogenousMap(counted.KeyType, typeof(int));
+          foreach (KeyValuePair<string, int> row in rows)
+            splitCounted[row.Key] = 1;
+          HomogenousMap splitNumbers = NumberedGenres(splitCounted, numbers, aspectId);
+
+          SortedList<int, GenreSpelling> numbered = new SortedList<int, GenreSpelling>();
+          foreach (KeyValuePair<string, int> row in rows)
+          {
+            int? number = NumberOf(splitNumbers, row.Key);
+            if (!number.HasValue)
+            {
+              // A genre nobody ever numbered keeps its own row under its own words: it has no key a picture could
+              // be filed under and no neighbour to merge with, and dropping it would hide titles from the shelf.
+              groups.Add(new GroupResult { Value = row.Key, Count = row.Value });
+              continue;
+            }
+            GenreSpelling spelling;
+            if (!numbered.TryGetValue(number.Value, out spelling))
+            {
+              spelling = new GenreSpelling();
+              numbered[number.Value] = spelling;
+            }
+            spelling.Count += row.Value;
+            int held;
+            if (!spelling.Words.TryGetValue(row.Key, out held))
+              held = 0;
+            spelling.Words[row.Key] = held + row.Value;
+          }
+          foreach (KeyValuePair<int, GenreSpelling> genre in numbered)
+          {
+            // The spelling the most titles carry is the word the library itself settled on; equally often
+            // spellings break by the alphabet, which is the same tie-break the wall's order obeys.
+            string best = genre.Value.Words
+                .OrderByDescending(spelled => spelled.Value)
+                .ThenBy(spelled => spelled.Key, StringComparer.OrdinalIgnoreCase)
+                .First().Key;
+            groups.Add(new GroupResult { Value = best, Count = genre.Value.Count, Id = genre.Key });
+          }
+        }
         else
         {
           foreach (KeyValuePair<object, object> entry in counted)
@@ -1586,8 +1732,7 @@ namespace MediaPortal.Server.Api
             groups.Add(new GroupResult
             {
               Value = named,
-              Count = Convert.ToInt32(entry.Value, CultureInfo.InvariantCulture),
-              Id = NumberOf(numbers, entry.Key)
+              Count = Convert.ToInt32(entry.Value, CultureInfo.InvariantCulture)
             });
           }
         }
@@ -1667,6 +1812,29 @@ namespace MediaPortal.Server.Api
     }
 
     /// <summary>
+    /// The separate genres one counted row names. Tag formats differ in how they pack several genres into one
+    /// field - some importers wrote "Dance, Club, Pop, RnB" where the reference's extractors would have split at
+    /// '/' or ';' - so all three separators are honoured here when the wall reads the rows back. A word that is
+    /// a known genre whole ("R&B", "Hip Hop", "Trip-Hop") survives intact; nothing inside it is split further,
+    /// because no separator this code splits on appears inside them.
+    /// </summary>
+    private static List<string> SplitGenreWords(string named)
+    {
+      string[] parts = named.Split(GENRE_SEPARATORS);
+      List<string> words = new List<string>(parts.Length);
+      foreach (string part in parts)
+      {
+        string word = part.Trim();
+        if (word.Length > 0 && !words.Contains(word, StringComparer.Ordinal))
+          words.Add(word);
+      }
+      return words;
+    }
+
+    /// <summary>The characters that divide one genre field into several genres.</summary>
+    private static readonly char[] GENRE_SEPARATORS = { ',', '/', ';' };
+
+    /// <summary>
     /// Which of the converter's tables a shelf's genres are looked up in: music shelves in the audio table,
     /// series shelves in the series table, everything else in the films' - the same division the importers use
     /// when they write a genre's number, and the reason the same words can be two different pictures on two
@@ -1700,6 +1868,18 @@ namespace MediaPortal.Server.Api
       if (!numbers.TryGetValue(value, out found))
         return null;
       return found as int?;
+    }
+
+    /// <summary>
+    /// Everything one genre number collected from the words counted beside it: how many titles carry any of its
+    /// spellings, and how many carry each spelling on its own. Only the merged genre counting uses it.
+    /// </summary>
+    private class GenreSpelling
+    {
+      public int Count;
+
+      /// <summary>The titles each spelling of this genre's words carries.</summary>
+      public Dictionary<string, int> Words = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
