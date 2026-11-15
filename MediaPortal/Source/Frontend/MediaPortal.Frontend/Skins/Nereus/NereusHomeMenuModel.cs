@@ -76,7 +76,10 @@ namespace MediaPortal.Frontend.Skins.Nereus
             // The musicians a shelf of records was made by, which the counting of a record shelf never lists as
             // "actors" - the word was simply wrong here, and the wall it opens is the artists' own.
             new NereusHomeShortcut("Artist", "MediaMenu/artist"),
-            new NereusHomeShortcut("Year", "MediaMenu/year", "year")
+            new NereusHomeShortcut("Year", "MediaMenu/year", "year"),
+            // The reference's music arm carries a search tile like every other media arm does; without it the
+            // viewer of a record shelf had no way onto the shelf's field from the home at all.
+            new NereusHomeShortcut("Search", "MediaMenu/search", screenKey: "search")
           },
           [Guid.Parse("55556593-9fe9-436c-a3b6-a971e10c9d44")] = new[]
           {

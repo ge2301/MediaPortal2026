@@ -2090,6 +2090,23 @@ namespace MediaPortal.Frontend.Views
         }
       }
 
+      // A search tile is the shelf wearing its own search field, which is exactly what the shelf's sidebar row
+      // and its Find key do - so the tile walks through the model's one door for the question rather than
+      // building a screen of its own.  It is asked before the countings and the named screens because the skin
+      // spells the tile's key as "MediaMenu/search", whose word no counting claims; a TV or radio search tile
+      // standing on a media shelf asks for that shelf's titles too, which is the only search this build has.
+      if (shortcut.ScreenKey != null && IsSearchShortcut(shortcut.ScreenKey)
+          && _home.SelectedEntry?.Section is HomeSection searched
+          && _sectionScreen?.Invoke(searched) is { } searchFrame
+          && searchFrame.ViewModel is MediaBrowserViewModel searcher)
+      {
+        // The shelf first, its field after: the caret can only be put into a control that stands on the screen,
+        // and the same order the age tile's sidebar follows (the comment there says why).
+        _workflow.Push(searchFrame);
+        searcher.OpenSearch();
+        return;
+      }
+
       if (shortcut.ScreenKey != null && OPENABLE_SHORTCUT_SCREENS.Contains(shortcut.ScreenKey))
       {
         OpenScreen(shortcut.ScreenKey);
@@ -2112,6 +2129,21 @@ namespace MediaPortal.Frontend.Views
     {
       "news", "weather", "tv", "radio", "tvwatch", "radiowatch", "schedules", "recordings"
     };
+
+    /// <summary>
+    /// Whether a shortcut's key is the skin's search tile: MP2 spells it <c>MediaMenu/search</c>, and the last
+    /// word of that key is what the shelf's own sidebar row, its Find key and this tile all ask for.  Named here
+    /// rather than folded into the press because the test for the tile's answer asks the same question.
+    /// </summary>
+    internal static bool IsSearchShortcut(string? screenKey)
+    {
+      if (string.IsNullOrEmpty(screenKey))
+        return false;
+
+      int slash = screenKey!.LastIndexOf('/');
+      return string.Equals((slash < 0 ? screenKey : screenKey.Substring(slash + 1)).Trim(),
+          "search", StringComparison.OrdinalIgnoreCase);
+    }
 
     private void OnNereusTileGotFocus(object? sender, RoutedEventArgs args)
     {

@@ -17,6 +17,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -625,6 +626,131 @@ namespace Tests.Frontend
       Assert.That(checked_tiles, Is.GreaterThanOrEqualTo(8),
           "the year and the genre stand on four shelves' tiles; a home menu that lost them all is not what this "
           + "test was written against");
+    }
+
+    /// <summary>
+    /// Every media shelf's Search tile is recognised as one, on every arm of the cross that carries it.  The
+    /// caught failure this stands against is a search tile whose key no press answers - the tile lit under the
+    /// hand, said its sentence about not being available, and opened nothing (viewer's word 2026-11-15: the
+    /// shortcut entries have to be finalised).  The music arm is named here because it only gained its tile with
+    /// this fix, and an arm that quietly lost it again would leave a record shelf with no way onto its field.
+    /// </summary>
+    [Test]
+    public void EveryMediaShelfCarriesASearchTileAndThePressKnowsIt()
+    {
+      var model = new MediaPortal.Frontend.Skins.Nereus.NereusHomeMenuModel();
+      var searched_shelves = new List<string>();
+      foreach (string action in new[]
+               {
+                 "80d2e2cc-baaa-4750-807b-f37714153751",  // movies
+                 "30f57cba-459c-4202-a587-09fff5098251",  // series
+                 "30715d73-4205-417f-80aa-e82f0834171f",  // records
+                 "55556593-9fe9-436c-a3b6-a971e10c9d44",  // videos
+                 "a4df2df6-8d66-479a-9930-d7106525eb07"   // videos, second action
+               })
+      {
+        MainMenuEntry entry = FindEntry(action);
+        foreach (MediaPortal.Frontend.Skins.Nereus.NereusHomeShortcut shortcut in model.ShortcutsFor(entry))
+        {
+          if (shortcut.Label != "Search")
+            continue;
+
+          searched_shelves.Add(action);
+          Assert.That(HomeView.IsSearchShortcut(shortcut.ScreenKey), Is.True,
+              "the Search tile of " + action + " wears a key the press does not read as a search, so it opens "
+              + "nothing but a sentence");
+        }
+      }
+
+      Assert.That(searched_shelves, Has.Count.EqualTo(5),
+          "every media arm of the skin's cross carries its search tile, the reference's arms included");
+    }
+
+    /// <summary>
+    /// What the Search tile's press lands on: the shelf itself, standing with its own search field open, which is
+    /// the same door the shelf's sidebar row and its Find key walk through.  A screen of its own for searching was
+    /// never built and was never wanted - the shelf has the field already.
+    /// </summary>
+    [AvaloniaTest]
+    public void TheSearchTileOpensItsShelfWithTheFieldStoodOpen()
+    {
+      CountingServer server = new CountingServer();
+      var home = new HomeViewModel(server.Client());
+      MainMenuEntry movies = FindEntry("80d2e2cc-baaa-4750-807b-f37714153751");
+      movies.Section = MOVIES;
+      home.SelectedEntry = movies;
+
+      // The shortcut column the entry asks for, as the skin lays it out: without the worn templates no square
+      // exists to be pressed, so the skin goes on the way the application puts it on.  A band is added only so
+      // that the wall has ground under the squares.
+      Application app = Application.Current!;
+      string? previousFolder = MediaPortal.Frontend.Theming.SkinEngine.SkinsFolder;
+      string previousTheme = MediaPortal.Frontend.Theming.FrontendTheme.CurrentName(app);
+      MediaPortal.Frontend.Theming.SkinEngine.SkinsFolder = Path.Combine(
+          Path.GetDirectoryName(typeof(HomeView).Assembly.Location)!, "Skins");
+      var workflow = new WorkflowManager();
+      MediaBrowserViewModel? shelf = null;
+      try
+      {
+        MediaPortal.Frontend.Theming.FrontendTheme.Apply(app, "nereus", out string? _);
+        MediaPortal.Frontend.Theming.SkinEngine.Apply(app, "nereus", out string? _);
+        home.ShowContentAsync(movies).GetAwaiter().GetResult();
+        home.ContentGroups.Add(new HomeContentGroup("Latest added", "square1", 760, 4));
+
+        ShellWindow window = new ShellWindow(workflow, delegate (WorkflowFrame frame)
+        {
+          if (frame.ViewModel is MediaBrowserViewModel browser)
+          {
+            shelf = browser;
+            return new MediaBrowserView(browser);
+          }
+          return new HomeView(home, workflow,
+              sectionScreen: delegate (HomeSection section)
+              {
+                return new WorkflowFrame("titles", section.Label,
+                    new MediaBrowserViewModel(server.Client(), section));
+              });
+        });
+        workflow.Push(new WorkflowFrame("home", "Home", home));
+        window.Width = 1920;
+        window.Height = 1080;
+        window.Show();
+        WaitUntil("the shortcut squares to stand",
+            delegate
+            {
+              return window.GetVisualDescendants().OfType<Button>()
+                  .Any(button => button.Tag is HomeContentTile worn && worn.IsShortcut);
+            });
+
+        // The press the wall's shortcut square raises: the same routed Click a hand or Enter produces, raised on
+        // the Search square of the movies arm itself, so that the handler the markup wires is the code tested.
+        Button tile = window.GetVisualDescendants().OfType<Button>()
+            .First(button => button.Tag is HomeContentTile worn && worn.IsShortcut
+                && worn.Shortcut != null && HomeView.IsSearchShortcut(worn.Shortcut.ScreenKey));
+
+        // The shelf the arm stands on has to be there for the press to walk onto it, which is what connecting to
+        // a server does; the entry that survives the rebuild is a fresh object though, so its section - which the
+        // real reading fills from the server's aspects - is put on it by hand again.
+        home.UseServer(server.Client());
+        MainMenuEntry standing = home.SelectedEntry!;
+        standing.Section = MOVIES;
+
+        tile.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent, tile));
+        Pump();
+
+        Assert.That(shelf, Is.Not.Null, "the search tile walked onto a shelf");
+        Assert.That(workflow.Current!.StateId, Is.EqualTo("titles"),
+            "the shelf stands on the screen, not merely built behind the home");
+        Assert.That(shelf!.SearchOpen, Is.True,
+            "and it wears its search field open, as the sidebar's Search row puts it on - the tile saves the "
+            + "viewer the walk to the row, nothing more");
+        window.Close();
+      }
+      finally
+      {
+        MediaPortal.Frontend.Theming.SkinEngine.SkinsFolder = previousFolder;
+        MediaPortal.Frontend.Theming.FrontendTheme.Apply(app, previousTheme, out string? _);
+      }
     }
 
     private static MainMenuEntry FindEntry(string actionId)
