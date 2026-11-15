@@ -2107,6 +2107,22 @@ namespace MediaPortal.Frontend.Views
         return;
       }
 
+      // A sort tile is the shelf read in another order: the reference's "Track" tile opens the record shelf's
+      // "show all items" screen, which walks the tracks by their numbers rather than the wall's order by name.
+      // Like the search tile it walks through the shelf's own door - PickSortAsync is the row of the shelf's
+      // sort page and asks the server again exactly as a hand pressing that row does.
+      string? asked_sort = SortAskedByShortcut(shortcut.ScreenKey);
+      if (asked_sort != null && _home.SelectedEntry?.Section is HomeSection sorted
+          && _sectionScreen?.Invoke(sorted) is { } sortFrame
+          && sortFrame.ViewModel is MediaBrowserViewModel sorter)
+      {
+        // The shelf first, its order after: the reading the shelf starts with is remembered against the screen
+        // being stood on, and a shelf nobody stands on has no reading to change yet.
+        _workflow.Push(sortFrame);
+        _ = sorter.PickSortAsync(asked_sort);
+        return;
+      }
+
       if (shortcut.ScreenKey != null && OPENABLE_SHORTCUT_SCREENS.Contains(shortcut.ScreenKey))
       {
         OpenScreen(shortcut.ScreenKey);
@@ -2143,6 +2159,25 @@ namespace MediaPortal.Frontend.Views
       int slash = screenKey!.LastIndexOf('/');
       return string.Equals((slash < 0 ? screenKey : screenKey.Substring(slash + 1)).Trim(),
           "search", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The order a shortcut tile asks the shelf to be read in, or null when the tile asks no order.  MP2 spells
+    /// the record shelf's Track tile as its show-all-items screen, whose only difference from the shelf the wall
+    /// opens is that its tracks stand in their numbers; the key says so as <c>sort/track</c>, and the word after
+    /// the slash is one of the orders the server answers.
+    /// </summary>
+    internal static string? SortAskedByShortcut(string? screenKey)
+    {
+      if (string.IsNullOrEmpty(screenKey))
+        return null;
+
+      int slash = screenKey!.LastIndexOf('/');
+      if (slash < 0 || !string.Equals(screenKey.Substring(0, slash).Trim(), "sort", StringComparison.OrdinalIgnoreCase))
+        return null;
+
+      string sort = screenKey.Substring(slash + 1).Trim();
+      return string.Equals(sort, "track", StringComparison.OrdinalIgnoreCase) ? "track" : null;
     }
 
     private void OnNereusTileGotFocus(object? sender, RoutedEventArgs args)

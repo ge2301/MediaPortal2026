@@ -71,7 +71,9 @@ namespace MediaPortal.Frontend.Skins.Nereus
           [Guid.Parse("30715d73-4205-417f-80aa-e82f0834171f")] = new[]
           {
             new NereusHomeShortcut("Genre", "MediaMenu/audiogenre", "genre"),
-            new NereusHomeShortcut("Track", "MediaMenu/track"),
+            // The reference's Track tile is no counting: it is the record shelf's "Show all items" screen, which
+            // walks the tracks in their numbers rather than the wall's order by name.  A sort, not a browse-by.
+            new NereusHomeShortcut("Track", "MediaMenu/track", screenKey: "sort/track"),
             new NereusHomeShortcut("Album", "MediaMenu/album"),
             // The musicians a shelf of records was made by, which the counting of a record shelf never lists as
             // "actors" - the word was simply wrong here, and the wall it opens is the artists' own.
@@ -84,6 +86,9 @@ namespace MediaPortal.Frontend.Skins.Nereus
           [Guid.Parse("55556593-9fe9-436c-a3b6-a971e10c9d44")] = new[]
           {
             new NereusHomeShortcut("Year", "MediaMenu/year", "year"),
+            // The reference leaves these three tiles empty: its own code says "ToDo: Add video location filter"
+            // and the same for the size, and its system filter counts platforms this library's import never
+            // records.  They keep the sentence that says so rather than a screen invented for them.
             new NereusHomeShortcut("Location", "MediaMenu/place"),
             new NereusHomeShortcut("System", "MediaMenu/system"),
             new NereusHomeShortcut("Size", "MediaMenu/size"),

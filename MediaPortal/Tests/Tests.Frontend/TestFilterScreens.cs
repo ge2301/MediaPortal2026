@@ -753,6 +753,123 @@ namespace Tests.Frontend
       }
     }
 
+    /// <summary>
+    /// The record arm's Track tile is the reference's show-all-items screen: the shelf of tracks read in their
+    /// numbers rather than the wall's order by name.  A caught failure this stands against is the tile lighting
+    /// under the hand and answering with nothing but its sentence (viewer's word 2026-11-15).  The videos arms'
+    /// Location, System and Size tiles are named here too because the reference leaves them empty - its own code
+    /// says "ToDo" - so a key appearing on them without a server behind it would be a tile lying about what it
+    /// can count.
+    /// </summary>
+    [Test]
+    public void TheTrackTileAsksTheShelfForItsNumbersAndTheVideosTilesAskNothingItCannotAnswer()
+    {
+      var model = new MediaPortal.Frontend.Skins.Nereus.NereusHomeMenuModel();
+
+      MainMenuEntry records = FindEntry("30715d73-4205-417f-80aa-e82f0834171f");
+      MediaPortal.Frontend.Skins.Nereus.NereusHomeShortcut? track = model.ShortcutsFor(records)
+          .FirstOrDefault(shortcut => shortcut.Label == "Track");
+      Assert.That(track, Is.Not.Null, "the record arm lost its Track tile");
+      Assert.That(HomeView.SortAskedByShortcut(track!.ScreenKey), Is.EqualTo("track"),
+          "the Track tile wears a key the press does not read as an order, so it opens nothing but a sentence");
+
+      foreach (string action in new[]
+               {
+                 "55556593-9fe9-436c-a3b6-a971e10c9d44",  // videos
+                 "a4df2df6-8d66-479a-9930-d7106525eb07"   // videos, second action
+               })
+      {
+        foreach (MediaPortal.Frontend.Skins.Nereus.NereusHomeShortcut shortcut
+            in model.ShortcutsFor(FindEntry(action)))
+        {
+          if (shortcut.Label != "Location" && shortcut.Label != "System" && shortcut.Label != "Size")
+            continue;
+
+          Assert.That(shortcut.BrowseBy, Is.Null,
+              "the " + shortcut.Label + " tile of " + action + " claims a counting the server refuses to count");
+          Assert.That(shortcut.ScreenKey, Is.Null,
+              "the " + shortcut.Label + " tile of " + action + " claims a screen the reference never built");
+        }
+      }
+    }
+
+    /// <summary>
+    /// What the Track tile's press lands on: the record shelf standing on the screen and read by the tracks'
+    /// numbers, which is the same door the shelf's own sort row walks through.
+    /// </summary>
+    [AvaloniaTest]
+    public void TheTrackTileOpensTheRecordShelfReadByItsNumbers()
+    {
+      CountingServer server = new CountingServer();
+      var home = new HomeViewModel(server.Client());
+      MainMenuEntry records = FindEntry("30715d73-4205-417f-80aa-e82f0834171f");
+      records.Section = MUSIC;
+      home.SelectedEntry = records;
+
+      Application app = Application.Current!;
+      string? previousFolder = MediaPortal.Frontend.Theming.SkinEngine.SkinsFolder;
+      string previousTheme = MediaPortal.Frontend.Theming.FrontendTheme.CurrentName(app);
+      MediaPortal.Frontend.Theming.SkinEngine.SkinsFolder = Path.Combine(
+          Path.GetDirectoryName(typeof(HomeView).Assembly.Location)!, "Skins");
+      var workflow = new WorkflowManager();
+      MediaBrowserViewModel? shelf = null;
+      try
+      {
+        MediaPortal.Frontend.Theming.FrontendTheme.Apply(app, "nereus", out string? _);
+        MediaPortal.Frontend.Theming.SkinEngine.Apply(app, "nereus", out string? _);
+        home.ShowContentAsync(records).GetAwaiter().GetResult();
+        home.ContentGroups.Add(new HomeContentGroup("Latest added", "square1", 760, 4));
+
+        ShellWindow window = new ShellWindow(workflow, delegate (WorkflowFrame frame)
+        {
+          if (frame.ViewModel is MediaBrowserViewModel browser)
+          {
+            shelf = browser;
+            return new MediaBrowserView(browser);
+          }
+          return new HomeView(home, workflow,
+              sectionScreen: delegate (HomeSection section)
+              {
+                return new WorkflowFrame("titles", section.Label,
+                    new MediaBrowserViewModel(server.Client(), section));
+              });
+        });
+        workflow.Push(new WorkflowFrame("home", "Home", home));
+        window.Width = 1920;
+        window.Height = 1080;
+        window.Show();
+        WaitUntil("the shortcut squares to stand",
+            delegate
+            {
+              return window.GetVisualDescendants().OfType<Button>()
+                  .Any(button => button.Tag is HomeContentTile worn && worn.IsShortcut);
+            });
+
+        Button tile = window.GetVisualDescendants().OfType<Button>()
+            .First(button => button.Tag is HomeContentTile worn && worn.IsShortcut
+                && HomeView.SortAskedByShortcut(worn.Shortcut?.ScreenKey) != null);
+
+        home.UseServer(server.Client());
+        MainMenuEntry standing = home.SelectedEntry!;
+        standing.Section = MUSIC;
+
+        tile.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent, tile));
+        Pump();
+
+        Assert.That(shelf, Is.Not.Null, "the track tile walked onto a shelf");
+        Assert.That(workflow.Current!.StateId, Is.EqualTo("titles"),
+            "the shelf stands on the screen, not merely built behind the home");
+        Assert.That(shelf!.SortOrder, Is.EqualTo("track"),
+            "and it is read by the tracks' numbers, as the reference's show-all-items screen reads them");
+        window.Close();
+      }
+      finally
+      {
+        MediaPortal.Frontend.Theming.SkinEngine.SkinsFolder = previousFolder;
+        MediaPortal.Frontend.Theming.FrontendTheme.Apply(app, previousTheme, out string? _);
+      }
+    }
+
     private static MainMenuEntry FindEntry(string actionId)
     {
       foreach (MainMenuEntry entry in MainMenu.Build(Array.Empty<AspectViewModel>(), connected: false))
