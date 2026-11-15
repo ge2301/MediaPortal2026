@@ -280,16 +280,15 @@ namespace Tests.Frontend
           }
 
           // The music rail's own three names, which are the ones the batch that finished the icon set added last.
-          // The picture that used to be each icon is still on disk beside its vector and stays out of the way: a
-          // shortcut takes a shape, because a shape is what can wear the colour and the focus state of its tile.
+          // The PNGs that used to be these icons were deleted with the move to vectors, so a shortcut can only
+          // ever be answered by the vector: there is no bitmap beside the name any more.
           foreach (string icon in new[] { "MediaMenu/track", "MediaMenu/album", "MediaMenu/audiogenre" })
           {
             Assert.That(worn.Vectors.Load(icon), Is.InstanceOf<Geometry>(),
                 "'" + icon + "' is what the music rail asks for, and the shortcut model is only as good as the "
                 + "drawing behind the name");
-            Assert.That(worn.Images.Load(icon), Is.InstanceOf<Bitmap>(),
-                "the PNG that used to be the icon is still lying beside the vector - and a shortcut that wants a "
-                + "vector is still answered by the vector");
+            Assert.That(worn.Images.Load(icon), Is.Null,
+                "the PNG that used to be the icon stayed deleted - the vector is all the name carries now");
           }
 
           // Every mark the foot of the playback screen can draw. The screen picks one of these per button and

@@ -181,9 +181,11 @@ namespace Tests.Frontend
         try
         {
           SkinImages nereus = SkinEngine.Worn(app)!.Images;
+          // The rail's faces moved to vectors and their PNGs were deleted with the move, so the disk spelling is
+          // demonstrated on a picture the skin still carries: same catalog, same answer.
           foreach (string spelled in new[]
           {
-              "MediaMenu/genre.png", "MediaMenu/year.png", "MediaMenu/actor.png", "MediaMenu/album.png"
+              "CD.png", "Background.PNG"
           })
           {
             Assert.That(nereus.Has(spelled), Is.True,
@@ -195,11 +197,11 @@ namespace Tests.Frontend
           }
 
           CultureInfo culture = CultureInfo.InvariantCulture;
-          Assert.That(SkinImageConverter.Instance.Convert("MediaMenu/genre.png", typeof(object), "{0}", culture),
+          Assert.That(SkinImageConverter.Instance.Convert("CD.png", typeof(object), "{0}", culture),
               Is.InstanceOf<Bitmap>(),
               "a template that binds the disk spelling through the converter is answered the same as one that "
               + "spells the catalog's name");
-          Assert.That(SkinImageMissingConverter.Instance.Convert("MediaMenu/genre.png", typeof(bool), "{0}", culture),
+          Assert.That(SkinImageMissingConverter.Instance.Convert("CD.png", typeof(bool), "{0}", culture),
               Is.False,
               "and with the picture answered, the tile keeps its letter badge away");
         }

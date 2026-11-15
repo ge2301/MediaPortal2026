@@ -94,7 +94,7 @@ namespace Tests.Frontend
           new[] { "Genre", "Year", "Age", "Actor", "Search" },
           model.ShortcutsFor(movies).Select(shortcut => shortcut.Label));
       CollectionAssert.AreEqual(
-          new[] { "Genre", "Track", "Album", "Artist", "Year" },
+          new[] { "Genre", "Track", "Album", "Artist", "Year", "Search" },
           model.ShortcutsFor(audio).Select(shortcut => shortcut.Label));
       // The icon is named, not filed: the model says which glyph, the skin says what it is made of - and it is
       // made of vectors now, so no extension is written anywhere in the model.

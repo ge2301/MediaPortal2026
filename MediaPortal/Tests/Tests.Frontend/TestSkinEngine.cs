@@ -211,10 +211,10 @@ namespace Tests.Frontend
     [AvaloniaTest]
     public void BothShippedSkinsCarryTheTransportPicturesThePlaybackBarWears()
     {
-      // Both bars say the state of play with the skin's own two pictures, asked by the name this front end
-      // spells from the reference's transport buttons - PlayerControl/PLAY.NOFOCUS and its PAUSE sibling. A name
-      // a skin does not carry is not an error but a quiet hole on the television, so the two names are asked of
-      // the shipped folders here, the way the home tiles' pictures are.
+      // The playback bar's transport marks are vectors now (PlayerControl/play and its siblings), asked through
+      // the vector catalog, so only WMC - whose band still paints with the reference's transport PNGs - is held
+      // to the two names PlayerControl/PLAY.NOFOCUS and its PAUSE sibling. Nereus carries them no longer; the
+      // cleanup that moved its glyphs to vectors deleted the focus/nofocus pairs it had never bound.
       Application app = Application.Current!;
       string? previousFolder = SkinEngine.SkinsFolder;
       SkinEngine.SkinsFolder = Path.Combine(MetadataPath("FrontendSource"), "Skins");
@@ -223,10 +223,13 @@ namespace Tests.Frontend
         Assert.That(SkinEngine.Apply(app, "nereus", out string? nereusProblem), Is.True,
             nereusProblem ?? "applied");
         SkinImages nereus = SkinEngine.Worn(app)!.Images;
-        Assert.That(nereus.Has("PlayerControl/PLAY.NOFOCUS"), Is.True,
-            "Nereus has no play picture for its bar, which would then say nothing while a film ran");
-        Assert.That(nereus.Has("PlayerControl/PAUSE.NOFOCUS"), Is.True,
-            "and it has no pause picture either, so a paused film would wear nothing");
+        SkinVectors nereusGlyphs = SkinEngine.Worn(app)!.Vectors;
+        Assert.That(nereusGlyphs.Has("PlayerControl/play"), Is.True,
+            "Nereus' bar says the state of play with its own glyph");
+        Assert.That(nereusGlyphs.Has("PlayerControl/pause"), Is.True,
+            "and its pause glyph, which is what the bar wears while a film stands still");
+        Assert.That(nereus.Has("PlayerControl/PLAY.NOFOCUS"), Is.False,
+            "the retired PNG spelling stayed deleted rather than creeping back beside the vector");
         SkinEngine.Clear(app);
 
         Assert.That(SkinEngine.Apply(app, "wmc", out string? wmcProblem), Is.True, wmcProblem ?? "applied");

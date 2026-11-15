@@ -394,9 +394,12 @@ namespace Tests.Frontend
       SkinImages nereus = SkinEngine.Worn(app)!.Images;
       Assert.That(nereus.Count, Is.GreaterThan(400),
           "the Nereus pictures came along; a skin without its images directory is a colour chart again");
-      Assert.That(nereus.Has("Square_small"), Is.True,
-          "the tile overlay the reference home screen drew with is answerable by its reference name");
-      Bitmap? square = nereus.Load("Square_small");
+      // The reference's tile overlay and the transport PNGs went with the cleanup that moved the rail to vectors
+      // and dropped the WPF-era focus/nofocus pairs; what the shipped skin still promises by name is its own
+      // backdrop and the CD the audio screen spins.
+      Assert.That(nereus.Has("Background"), Is.True,
+          "the skin's own backdrop is answerable by its reference name");
+      Bitmap? square = nereus.Load("CD");
       Assert.That(square, Is.Not.Null, "and the file really reads as a picture");
       SkinEngine.Clear(app);
 
