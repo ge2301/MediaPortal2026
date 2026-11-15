@@ -89,10 +89,12 @@ namespace MediaPortal.Frontend.Skins.Nereus
           [Guid.Parse("55556593-9fe9-436c-a3b6-a971e10c9d44")] = new[]
           {
             new NereusHomeShortcut("Year", "MediaMenu/year", "year"),
-            // The reference leaves these three tiles empty: its own code says "ToDo: Add video location filter"
-            // and the same for the size, and its system filter counts platforms this library's import never
-            // records.  They keep the sentence that says so rather than a screen invented for them.
-            new NereusHomeShortcut("Location", "MediaMenu/place"),
+            // The reference leaves the location tile empty ("ToDo: Add video location filter"); this server
+            // counts a shelf by the folder its files stand in, so the tile asks for that wall.  The size stays
+            // empty like the reference's - no file size is stored anywhere the server could group on - and the
+            // system filter counts platforms this library's import never records.  Both keep the sentence that
+            // says so rather than a screen invented for them.
+            new NereusHomeShortcut("Location", "MediaMenu/place", "location"),
             new NereusHomeShortcut("System", "MediaMenu/system"),
             new NereusHomeShortcut("Size", "MediaMenu/size"),
             new NereusHomeShortcut("Search", "MediaMenu/search", screenKey: "search")
@@ -100,7 +102,7 @@ namespace MediaPortal.Frontend.Skins.Nereus
           [Guid.Parse("a4df2df6-8d66-479a-9930-d7106525eb07")] = new[]
           {
             new NereusHomeShortcut("Year", "MediaMenu/year", "year"),
-            new NereusHomeShortcut("Location", "MediaMenu/place"),
+            new NereusHomeShortcut("Location", "MediaMenu/place", "location"),
             new NereusHomeShortcut("System", "MediaMenu/system"),
             new NereusHomeShortcut("Size", "MediaMenu/size"),
             new NereusHomeShortcut("Search", "MediaMenu/search", screenKey: "search")

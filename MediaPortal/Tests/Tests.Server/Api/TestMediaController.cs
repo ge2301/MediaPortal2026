@@ -5223,6 +5223,144 @@ namespace Tests.Server.Api
 
     #endregion
 
+    #region Counting a shelf by where its files lie
+
+    // The paths a location wall is counted from: each film stands in the folder named after it, as a library
+    // imported folder-by-folder files them. Written in the serialized form the endpoint answers a title's path
+    // with, because that is the string the grouping reads.
+    private const string ALIEN_FOLDER = "{44444444-4444-4444-4444-444444444444}:///Films/Alien";
+    private const string BLADE_FOLDER = "{44444444-4444-4444-4444-444444444444}:///Films/Blade Runner";
+    private const string SERENITY_FOLDER = "{44444444-4444-4444-4444-444444444444}:///Series/Serenity";
+
+    /// <summary>
+    /// A shelf library that can answer the census <c>by=location</c> asks: the titles it holds are returned for
+    /// every question but the lookup of one title by id, which no location question ever is.
+    /// </summary>
+    private static IMediaLibrary CreateFolderShelfLibrary(IList<MediaItem> items,
+        out List<MediaItemQuery> queries)
+    {
+      var library = new Mock<IMediaLibrary>(MockBehavior.Strict);
+      library.Setup(get => get.GetManagedMediaItemAspectMetadata()).Returns(new Dictionary<Guid, MediaItemAspectMetadata>
+      {
+          { MediaAspect.ASPECT_ID, MediaAspect.Metadata },
+          { MovieAspect.ASPECT_ID, MovieAspect.Metadata },
+          { GenreAspect.ASPECT_ID, GenreAspect.Metadata },
+          { VideoAspect.ASPECT_ID, VideoAspect.Metadata }
+      });
+
+      List<MediaItemQuery> asked = new List<MediaItemQuery>();
+      library.Setup(get => get.Search(It.IsAny<MediaItemQuery>(), false, null, false))
+          .Callback<MediaItemQuery, bool, Guid?, bool>((query, online, profile, virtualItems) => asked.Add(query))
+          .Returns(items);
+      library.Setup(get => get.CountMediaItems(It.IsAny<IEnumerable<Guid>>(), It.IsAny<IFilter>(), false, false))
+          .Returns(items.Count);
+
+      queries = asked;
+      return library.Object;
+    }
+
+    [Test]
+    public void TheLocationWallCountsTheFolderEachTitleStandsIn()
+    {
+      List<MediaItemQuery> queries;
+      IMediaLibrary library = CreateFolderShelfLibrary(new List<MediaItem>
+      {
+          CreateItem(Guid.NewGuid(), "Alien", "Alien", DateTime.Now, 0,
+              CreateLocator(ALIEN_FOLDER + "/Alien.mkv")),
+          CreateItem(Guid.NewGuid(), "Blade Runner", "Blade Runner", DateTime.Now, 0,
+              CreateLocator(BLADE_FOLDER + "/Blade Runner.mkv")),
+          CreateItem(Guid.NewGuid(), "Serenity", "Serenity", DateTime.Now, 0,
+              CreateLocator(SERENITY_FOLDER + "/Serenity.mkv")),
+          // Loose at the root of the share: no folder of its own to stand under, so it joins no heading - the
+          // same law that leaves a title without a year out of the years.
+          CreateItem(Guid.NewGuid(), "Loose", "Loose", DateTime.Now, 0,
+              CreateLocator("{44444444-4444-4444-4444-444444444444}:///Loose.mkv"))
+      }, out queries);
+
+      ActionResult<MediaController.GroupsResult> action;
+      MediaController.GroupsResult result = GetGroups(library, "MovieItem", "location", out action);
+
+      Assert.That(Status(action), Is.Null);
+      Assert.That(result.By, Is.EqualTo("location"));
+      Assert.That(result.Groups.Select(group => group.Value),
+          Is.EquivalentTo(new[] { ALIEN_FOLDER, BLADE_FOLDER, SERENITY_FOLDER }),
+          "one heading per folder the files actually stand in, spelled exactly as a title's own path spells it; "
+          + "a title loose at the root of its share has no folder of its own and joins none, like a title "
+          + "without a year joins no year");
+      Assert.That(result.Groups, Has.All.Property("Count").EqualTo(1),
+          "each of these folders holds the one file standing in it");
+      Assert.That(queries, Has.Count.EqualTo(1),
+          "the census is one read of the shelf's paths, not a question per title");
+      Assert.That(queries[0].NecessaryRequestedMIATypeIDs, Does.Contain(ProviderResourceAspect.ASPECT_ID),
+          "without the provider aspect there is no path to group on");
+    }
+
+    [Test]
+    public void TheTitlesOfOneFolderAreExactlyTheTitlesCountedIntoIt()
+    {
+      List<MediaItemQuery> queries;
+      Guid alienId = Guid.NewGuid();
+      IMediaLibrary library = CreateFolderShelfLibrary(new List<MediaItem>
+      {
+          CreateItem(alienId, "Alien", "Alien", DateTime.Now, 0, CreateLocator(ALIEN_FOLDER + "/Alien.mkv")),
+          CreateItem(Guid.NewGuid(), "Aliens", "Aliens", DateTime.Now, 0, CreateLocator(ALIEN_FOLDER + "/Aliens.mkv")),
+          CreateItem(Guid.NewGuid(), "Blade Runner", "Blade Runner", DateTime.Now, 0,
+              CreateLocator(BLADE_FOLDER + "/Blade Runner.mkv"))
+      }, out queries);
+
+      ServiceRegistration.Set<IMediaLibrary>(library);
+      ActionResult<MediaController.TitlesResult> action =
+          new MediaController().GetTitles("MovieItem", null, null, 0, 0, null, null, Guid.Empty,
+              "location", ALIEN_FOLDER);
+      MediaController.TitlesResult result = Body(action);
+
+      Assert.That(Status(action), Is.Null);
+      Assert.That(result.By, Is.EqualTo("location"));
+      Assert.That(result.Value, Is.EqualTo(ALIEN_FOLDER),
+          "and the answer says which folder it is looking at, even before a single title arrives");
+      Assert.That(result.Total, Is.EqualTo(2));
+      Assert.That(result.Titles, Has.Count.EqualTo(2));
+      Assert.That(result.Titles.Select(title => title.Title), Is.EquivalentTo(new[] { "Alien", "Aliens" }),
+          "the heading opens exactly the files that were counted into it - the wall and its shelves read the "
+          + "paths through one and the same rule");
+    }
+
+    [Test]
+    public void AFolderNobodyStandsInAnswersAnEmptyShelfRatherThanTheWholeOne()
+    {
+      List<MediaItemQuery> queries;
+      IMediaLibrary library = CreateFolderShelfLibrary(new List<MediaItem>
+      {
+          CreateItem(Guid.NewGuid(), "Alien", "Alien", DateTime.Now, 0, CreateLocator(ALIEN_FOLDER + "/Alien.mkv"))
+      }, out queries);
+
+      ServiceRegistration.Set<IMediaLibrary>(library);
+      ActionResult<MediaController.TitlesResult> action =
+          new MediaController().GetTitles("MovieItem", null, null, 0, 0, null, null, Guid.Empty,
+              "location", BLADE_FOLDER);
+      MediaController.TitlesResult result = Body(action);
+
+      Assert.That(Status(action), Is.Null);
+      Assert.That(result.Titles, Is.Empty,
+          "a folder the wall never listed is an empty shelf, not the whole library wearing a heading");
+    }
+
+    [Test]
+    public void TheLocationWordIsNamedInTheRefusalBesideTheOthers()
+    {
+      IMediaLibrary library = CreateCountingLibrary(new HomogenousMap(typeof(string), typeof(int)),
+          out _, out _, out _);
+
+      ActionResult<MediaController.GroupsResult> action;
+      GetGroups(library, "MovieItem", "colour", out action);
+
+      Assert.That(Status(action), Is.EqualTo(400));
+      Assert.That(Body(action).Error, Does.Contain("locations"),
+          "a screen wiring up the browse menu learns from the refusal that the folders can be counted too");
+    }
+
+    #endregion
+
     #region One named kind of picture
 
     /// <summary>

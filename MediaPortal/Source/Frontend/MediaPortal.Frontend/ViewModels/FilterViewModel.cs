@@ -65,14 +65,16 @@ namespace MediaPortal.Frontend.ViewModels
   public sealed partial class FilterViewModel : ObservableObject, Views.IMenuRailOwner
   {
     /// <summary>
-    /// The two countings a shelf's shortcut tile answers on a screen of its own.
+    /// The countings a shelf's shortcut tile answers on a screen of its own.
     /// </summary>
     /// <remarks>
     /// The rest of the categories the server counts stay in the shelf's own sidebar. The people are not in this
     /// list because they are not a counting - they have their walls - and the age rating stays in the sidebar
     /// because a household's films answer it with half a dozen values, which is a row of a menu and not a screen.
+    /// The folders stand on this list because a household's files answer them with hundreds of values, which is
+    /// the other end of the same measure.
     /// </remarks>
-    private static readonly string[] OWN_SCREEN_CATEGORIES = { "genre", "year" };
+    private static readonly string[] OWN_SCREEN_CATEGORIES = { "genre", "year", "location" };
 
     /// <summary>
     /// The counting whose values stay in the shelf's sidebar, and whose shortcut therefore opens the shelf with

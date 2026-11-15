@@ -530,12 +530,14 @@ namespace MediaPortal.Server.Api
     /// </param>
     /// <param name="by">
     /// One of the categories of <c>GET api/media/groups</c> - <c>genre</c>, <c>year</c>, <c>age</c>, <c>actors</c>,
-    /// <c>directors</c>, <c>writers</c>, <c>collection</c> - to keep only the titles carrying
+    /// <c>directors</c>, <c>writers</c>, <c>collection</c>, <c>location</c> - to keep only the titles carrying
     /// <paramref name="value"/> under it.  Together with the value it answers the second half of browsing: the
     /// groups say which genres there are, this says which films are in one of them.  <c>by=collection</c> is how a
     /// screen asks which films a collection holds.  <c>by=age</c> asks for the years a rating asks for - the same
     /// numbers the details' <c>Age</c> row shows, not the marks the library keeps - on the shelves that carry
     /// ratings, films and series; <c>value=16</c> holds every title whose mark asks for sixteen years.
+    /// <c>by=location</c> opens one folder of the wall <c>groups?by=location</c> counted: the value is a folder's
+    /// serialized path exactly as the counting spelled it, and its titles are the files lying directly in it.
     /// </param>
     /// <param name="value">
     /// The value to match: a genre, an actor's name as the importer wrote it, or - under <c>by=year</c> - a year,
@@ -1004,6 +1006,7 @@ namespace MediaPortal.Server.Api
         IFilter groupFilter = null;
         string askedBy = null;
         string askedValue = null;
+        bool askingByLocation = false;
         if (category != null)
         {
           string known;
@@ -1012,11 +1015,10 @@ namespace MediaPortal.Server.Api
             return BadRequest(new TitlesResult
             {
               By = category,
-              Error = "this endpoint can pick titles out by genre, year, age, actors, directors, writers and "
-                  + "collections; '" +
+              Error = "this endpoint can pick titles out by " + CategoryWords() + "; '" +
                   category + "' is not one of them - see GET api/media/groups"
             });
-          if (spec == null)
+          if (spec == null && !string.Equals(known, "location", StringComparison.OrdinalIgnoreCase))
             // The word names a real category, but not one this shelf carries - 'age' on an album, say. Refused
             // like an unknown word: the titles that came back would be the whole shelf under an age heading.
             return BadRequest(new TitlesResult
@@ -1149,6 +1151,17 @@ namespace MediaPortal.Server.Api
                 ? headingFilters[0]
                 : BooleanCombinationFilter.CombineFilters(BooleanOperator.Or, headingFilters);
           }
+          else if (known.Equals("location", StringComparison.OrdinalIgnoreCase))
+          {
+            // A folder is not a column, so its titles cannot be asked for by one condition the database can
+            // count through: LIKE over the stored path strings folds accents and case differently than the
+            // ordinal ignore-case grouping the counting used, and one equality per spelling would be unbounded.
+            // The shelf is therefore opened by the same census that counted it - see FoldersOfTitles - and the
+            // LIKE filter built here only narrows the ordinary questions (search words, restrictions) that ride
+            // along with it.
+            groupFilter = null;
+            askingByLocation = true;
+          }
           else
           {
             groupFilter = new RelationalFilter(spec, RelationalOperator.EQ, picked);
@@ -1221,9 +1234,33 @@ namespace MediaPortal.Server.Api
         // opinion, and it is asked of the aspects this browse is about - the same reading the reference used for
         // the same switch. Off, which is what every installation runs with, this is the same call it always was.
         bool invented = VirtualTitles.ShowsVirtualFor(new[] { aspectId });
-        IList<MediaItem> items = mediaLibrary.Search(query, false, profile, invented);
 
-        List<TitleResult> titles = items.Select(item => ToTitle(item, profile.HasValue)).ToList();
+        // A folder shelf cannot be paged by the database. The counting grouped the stored path strings by an
+        // ordinal ignore-case comparison, and no condition this library can build repeats that exactly - LIKE
+        // folds case through its own collation and equality through yet another - so opening a heading with a
+        // condition could hand out a slightly different shelf than the wall counted. The heading is therefore
+        // opened from the very same census: the shelf is read once with every other question still asked (the
+        // viewer's search words, the household's restrictions), each title is placed under the folder the
+        // counting would place it under, and that folder is cut to the page here. At shelf size that is one
+        // plain query; at any size the two halves agree letter for letter.
+        List<TitleResult> locatedTitles = null;
+        int locatedTotal = 0;
+        if (askingByLocation)
+        {
+          Dictionary<string, List<MediaItem>> shelves = FoldersOfTitles(mediaLibrary, aspectId, asking, invented);
+          List<MediaItem> folder;
+          if (!shelves.TryGetValue(picked ?? "", out folder))
+            folder = new List<MediaItem>();
+          locatedTotal = folder.Count;
+          locatedTitles = folder.Skip(skip).Take(take)
+              .Select(item => ToTitle(item, profile.HasValue)).ToList();
+        }
+
+        IList<MediaItem> items = locatedTitles != null
+            ? new List<MediaItem>()
+            : mediaLibrary.Search(query, false, profile, invented);
+
+        List<TitleResult> titles = locatedTitles ?? items.Select(item => ToTitle(item, profile.HasValue)).ToList();
 
         // A series is never paused and an album never stopped - the episode and the track are - so when the
         // caller asks which containers they left half way and does it as themselves, every row is asked one
@@ -1400,9 +1437,11 @@ namespace MediaPortal.Server.Api
         // no count at all.
         // A counted shelf is as long as the counting made it; the library's own count of the asked aspect would
         // answer "how many episodes", which is not the question the shelf asked.
-        int total = counted != null
-            ? counted.Count
-            : mediaLibrary.CountMediaItems(new[] { aspectId }, query.Filter, false, invented);
+        int total = locatedTitles != null
+            ? locatedTotal
+            : counted != null
+                ? counted.Count
+                : mediaLibrary.CountMediaItems(new[] { aspectId }, query.Filter, false, invented);
 
         return new TitlesResult
         {
@@ -1492,10 +1531,14 @@ namespace MediaPortal.Server.Api
     /// not counted, so <c>aspect=MovieItem</c> counts genres as films have them and leaves the albums' out.
     /// </param>
     /// <param name="by">
-    /// <c>genre</c>, <c>year</c>, <c>age</c>, <c>actors</c>, <c>directors</c>, <c>writers</c> or <c>collection</c> -
+    /// <c>genre</c>, <c>year</c>, <c>age</c>, <c>actors</c>, <c>directors</c>, <c>writers</c>, <c>collection</c>
+    /// or <c>location</c> -
     /// the categories a shelf is grouped by. <c>age</c> counts the years the rating asks for - the marks a shelf
     /// holds are read into numbers the same way the details' <c>Age</c> row reads them, and the titles of equal
-    /// years come back as one row, smallest year first. An unknown word is refused rather than guessed at: a browse screen that
+    /// years come back as one row, smallest year first. <c>location</c> counts where the files lie: every title's
+    /// primary resource is placed under the folder it stands in, and the folder comes back in the serialized form
+    /// a title's <c>path</c> uses, so pressing a heading opens it with <c>GET api/media/titles?by=location</c>.
+    /// An unknown word is refused rather than guessed at: a browse screen that
     /// silently counted the wrong thing would sort the library into categories nobody asked for, and the list of
     /// what does work is in the refusal.
     /// </param>
@@ -1539,8 +1582,7 @@ namespace MediaPortal.Server.Api
         return BadRequest(new GroupsResult
         {
           By = by,
-          Error = "the library can be counted by genre, year, age, actors, directors, writers and collections; '" +
-              by + "' is not one of them"
+          Error = "the library can be counted by " + CategoryWords() + "; '" + by + "' is not one of them"
         });
 
       try
@@ -1562,6 +1604,35 @@ namespace MediaPortal.Server.Api
 
         Guid aspectId = match.Key;
 
+        // The aspect holding the values has to take part in the query or its column is not there to group on,
+        // and the shelf aspect has to take part too or the count would run over every title that carries the
+        // attribute - every film, episode and recording at once, under whichever heading was asked for.
+        List<Guid> necessary = new List<Guid> { aspectId };
+
+        // 'location' is the one category not counted from a column: where a title's file lies is written on its
+        // resource, which no GROUP BY can reach. The shelf is read once for its paths and grouped here - the same
+        // in-memory census CountSeasonsOfSeries makes of a series' episodes, over the whole shelf. A folder's
+        // titles are then asked back through the stored path string (see LocationFolderFilter), so the counting
+        // and the opening agree exactly.
+        if (string.Equals(known, "location", StringComparison.OrdinalIgnoreCase))
+        {
+          IFilter where = CallerRestrictionFilter(necessary);
+          Dictionary<string, int> folders = CountedFolders(mediaLibrary, aspectId, where);
+          List<GroupResult> located = folders
+              .Select(folder => new GroupResult { Value = folder.Key, Count = folder.Value })
+              .ToList();
+          located.Sort((a, b) => b.Count != a.Count
+              ? b.Count.CompareTo(a.Count)
+              : string.Compare(a.Value, b.Value, StringComparison.OrdinalIgnoreCase));
+          return new GroupsResult
+          {
+            Aspect = match.Value.Name,
+            AspectId = aspectId,
+            By = known,
+            Groups = located
+          };
+        }
+
         // 'age' arrives here with no attribute because the rating is not one column but two - one on films, one
         // on series - and only the shelf says which of them is being counted.
         if (spec == null)
@@ -1575,10 +1646,6 @@ namespace MediaPortal.Server.Api
             Error = AgeNotOnShelf(known, match.Value.Name)
           });
 
-        // The aspect holding the values has to take part in the query or its column is not there to group on,
-        // and the shelf aspect has to take part too or the count would run over every title that carries the
-        // attribute - every film, episode and recording at once, under whichever heading was asked for.
-        List<Guid> necessary = new List<Guid> { aspectId };
         Guid holding = spec.ParentMIAM != null ? spec.ParentMIAM.AspectId : Guid.Empty;
         if (holding != Guid.Empty && !necessary.Contains(holding))
           necessary.Add(holding);
@@ -1927,11 +1994,32 @@ namespace MediaPortal.Server.Api
         Projection = projection;
       }
 
+      /// <summary>
+      /// The category that counts where the files lie rather than what a column says - see
+      /// <see cref="CountsFolders"/>.
+      /// </summary>
+      public Category(string word)
+      {
+        Word = word;
+        Attribute = null;
+        Projection = ProjectionFunction.None;
+      }
+
       public string Word { get; private set; }
 
       public MediaItemAspectMetadata.AttributeSpecification Attribute { get; private set; }
 
       public ProjectionFunction Projection { get; private set; }
+
+      /// <summary>
+      /// Whether this word is counted off the titles' file paths instead of a database column, which decides how
+      /// both endpoints read a null <see cref="Attribute">: 'age' carries no attribute because the shelf chooses
+      /// between two, 'location' carries none because it reads no attribute at all.
+      /// </summary>
+      public bool CountsFolders
+      {
+        get { return string.Equals(Word, "location", StringComparison.OrdinalIgnoreCase); }
+      }
     }
 
     /// <summary>
@@ -1981,8 +2069,18 @@ namespace MediaPortal.Server.Api
         new Category("actors", VideoAspect.ATTR_ACTORS, ProjectionFunction.None),
         new Category("directors", VideoAspect.ATTR_DIRECTORS, ProjectionFunction.None),
         new Category("writers", VideoAspect.ATTR_WRITERS, ProjectionFunction.None),
-        new Category("collection", MovieAspect.ATTR_COLLECTION_NAME, ProjectionFunction.None)
+        new Category("collection", MovieAspect.ATTR_COLLECTION_NAME, ProjectionFunction.None),
+        new Category("location")
     };
+
+    /// <summary>
+    /// The categories a refusal can name: the words of <see cref="CATEGORIES"/> in their own order, with the
+    /// collection spelled as the endpoints have always spelled it in prose.
+    /// </summary>
+    private static string CategoryWords()
+    {
+      return "genre, year, age, actors, directors, writers, collections and locations";
+    }
 
     /// <summary>
     /// The shelves that carry an age rating and the column each of them carries it on, in the order a refusal
@@ -2023,6 +2121,112 @@ namespace MediaPortal.Server.Api
     {
       return "'" + word + "' counts the age rating, which is written on " + AgeCategories() + "; '" + shelfName +
           "' titles carry no rating of their own";
+    }
+
+    /// <summary>
+    /// The folder one serialized path lies in: everything up to - but not including - the file's own segment,
+    /// serialized back the way it came. A title whose path cannot be read or has no folder above its file
+    /// answers null and belongs to no heading, exactly as a title without a year belongs to no year.
+    /// </summary>
+    /// <remarks>
+    /// The path is cut through <see cref="ResourcePath.Deserialize"/> rather than by trimming the serialized
+    /// string, because the last '/' of a serialized path is not always a folder boundary: a chained provider
+    /// separates its segments with '&gt;' and an archive member's path can name a directory-like entry. Only the
+    /// base segment is walked - anything chained behind it (an archive inside that folder) still stands under the
+    /// folder its file lies in - and the cutting trims the serialized text behind the provider's own marker, so
+    /// whatever separator style the importer stored its paths in survives untouched: three slashes for a local
+    /// drive, five for a UNC share, one for a share-rooted path.
+    /// </remarks>
+    private static string FolderOfSerializedPath(string serialized)
+    {
+      if (string.IsNullOrEmpty(serialized))
+        return null;
+      try
+      {
+        ResourcePath path = ResourcePath.Deserialize(serialized);
+        ProviderPathSegment baseSegment = path.BasePathSegment;
+        if (baseSegment == null)
+          return null;
+        string prefix = baseSegment.ProviderId.ToString("B") + "://";
+        // The last segment is cut off the whole serialized form so that whatever separator style the importer
+        // stored its paths in survives untouched - trimming only the base segment's text would drop the slashes
+        // that mark a local drive or a UNC share and put one file under two spellings. Deserialize is still the
+        // gate: a malformed path is read here before anything is cut, and what cannot be read joins no heading.
+        string whole = path.Serialize();
+        int cut = whole.LastIndexOf('/');
+        // A file directly at the root of what the provider gives - or at the root of a share, which is the same
+        // thing to the viewer standing in front of the wall - has no folder of its own to stand under. Only the
+        // words behind the provider's "://" marker count; the marker itself is not a folder.
+        if (cut < 0 || whole.Substring(prefix.Length, cut - prefix.Length).Trim('/').Length == 0)
+          return null;
+        return whole.Substring(0, cut);
+      }
+      catch (ArgumentException)
+      {
+        // A stored path this build cannot read is not a folder; the title simply joins no heading.
+        return null;
+      }
+    }
+
+    /// <summary>
+    /// Reads a shelf once and places every title under the folder of its primary resource, the same grouping
+    /// <see cref="CountedFolders"/> counts and <see cref="GetTitles"/> opens a heading from - one reading rule
+    /// shared by both halves so that a heading's titles are exactly the titles counted into it.
+    /// </summary>
+    /// <param name="mediaLibrary">The server's library.</param>
+    /// <param name="shelfId">Which kind of title to walk.</param>
+    /// <param name="where">Every other question to ask alongside - the household's restrictions, a search box's
+    /// words - or null for the plain shelf.</param>
+    /// <param name="invented">Whether the titles the library invented take part, the same answer the ordinary
+    /// listing gives.</param>
+    /// <returns>The folders in the words they are listed in, each holding its titles in the order the library
+    /// answered them. Titles without a readable folder are left out.</returns>
+    private static Dictionary<string, List<MediaItem>> FoldersOfTitles(IMediaLibrary mediaLibrary, Guid shelfId,
+        IFilter where, bool invented)
+    {
+      // No offset and no limit: a census counts everybody. The provider aspect travels as necessary because a
+      // title without it has no path to group by, and the media aspect travels with it because the row a viewer
+      // opens afterwards shows its title and year - unasked, the library strips both off the items again
+      // (MediaLibrary.Search, the "has to be removed" passes) and the folder's shelf would stand there nameless.
+      List<Guid> necessary = new List<Guid> { shelfId };
+      if (shelfId != ProviderResourceAspect.ASPECT_ID)
+        necessary.Add(ProviderResourceAspect.ASPECT_ID);
+      if (shelfId != MediaAspect.ASPECT_ID)
+        necessary.Add(MediaAspect.ASPECT_ID);
+      MediaItemQuery shelf = new MediaItemQuery(necessary, null, where);
+
+      Dictionary<string, List<MediaItem>> folders =
+          new Dictionary<string, List<MediaItem>>(StringComparer.OrdinalIgnoreCase);
+      IList<MediaItem> held = mediaLibrary.Search(shelf, false, null, invented);
+      if (held == null)
+        return folders;
+
+      foreach (MediaItem item in held)
+      {
+        string folder = FolderOfSerializedPath(ReadPath(item));
+        if (folder == null)
+          continue;
+        List<MediaItem> titles;
+        if (!folders.TryGetValue(folder, out titles))
+        {
+          titles = new List<MediaItem>();
+          folders[folder] = titles;
+        }
+        titles.Add(item);
+      }
+      return folders;
+    }
+
+    /// <summary>
+    /// How many titles of one shelf lie in each folder - the census behind <c>by=location</c>, in the shape the
+    /// counting wants (folder to number) rather than the shape the opening wants (folder to titles).
+    /// </summary>
+    private static Dictionary<string, int> CountedFolders(IMediaLibrary mediaLibrary, Guid shelfId,
+        IFilter where)
+    {
+      bool invented = VirtualTitles.ShowsVirtualFor(new[] { shelfId });
+      return FoldersOfTitles(mediaLibrary, shelfId, where, invented)
+          .ToDictionary(entry => entry.Key, entry => entry.Value.Count, StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -2127,7 +2331,11 @@ namespace MediaPortal.Server.Api
       Category found = CATEGORIES.FirstOrDefault(entry =>
           string.Equals(entry.Word, by, StringComparison.OrdinalIgnoreCase));
       word = found != null ? found.Word : null;
-      attribute = found == null ? null : found.Attribute ?? (found.Word == "age" ? AgeCertification(shelfId) : null);
+      // 'location' carries no attribute on purpose - it is counted off the file paths, not off a column - so its
+      // null means "no column at all" and only 'age' still asks the shelf which of its two columns is meant.
+      attribute = found == null || found.CountsFolders
+          ? null
+          : found.Attribute ?? (found.Word == "age" ? AgeCertification(shelfId) : null);
       projection = found != null ? found.Projection : ProjectionFunction.None;
       return found != null;
     }

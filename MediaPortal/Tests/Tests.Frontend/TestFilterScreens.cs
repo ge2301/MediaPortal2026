@@ -197,6 +197,17 @@ namespace Tests.Frontend
       return new FilterViewModel(server.Client(), shelf, by);
     }
 
+    [Test]
+    public void TheFoldersStandBesideTheYearsAndTheGenresAsAScreenOfTheirOwn()
+    {
+      // The videos arms' Location tile walks through this claim; a wall that lost the word would leave the tile
+      // answering with the sentence about unavailable shortcuts again.
+      Assert.That(FilterViewModel.OwnsItsOwnScreen("location"), Is.True);
+      Assert.That(FilterViewModel.Countings, Does.Contain("location"));
+      Assert.That(new FilterViewModel(null, MOVIES, "location").Word, Is.EqualTo("location"),
+          "and the screen says 'folders' its own word over the wall of paths the server counted");
+    }
+
     private static void Press(Control control, Key key)
     {
       control.RaiseEvent(new KeyEventArgs
@@ -365,8 +376,8 @@ namespace Tests.Frontend
       // Climbing down over the shape row is what every other rail does: the commands page is left standing behind.
       filter.Command.Execute(null);
       Assert.That(values.MediaMenuHeading, Is.EqualTo("Filter"));
-      Assert.That(values.MediaMenu.Select(row => row.Label), Is.EqualTo(new[] { "Genre", "Year" }),
-          "the two countings stand in the order the shelf's own tiles stand them");
+      Assert.That(values.MediaMenu.Select(row => row.Label), Is.EqualTo(new[] { "Genre", "Year", "Location" }),
+          "the three countings stand in the order the screen's own table stands them");
       Assert.That(values.MediaMenu.First(row => row.Label == "Year").IsCurrent, Is.True,
           "the standing counting is marked as the shelf marks its own current filter");
     }
@@ -809,7 +820,19 @@ namespace Tests.Frontend
         foreach (MediaPortal.Frontend.Skins.Nereus.NereusHomeShortcut shortcut
             in model.ShortcutsFor(FindEntry(action)))
         {
-          if (shortcut.Label != "Location" && shortcut.Label != "System" && shortcut.Label != "Size")
+          if (shortcut.Label == "Location")
+          {
+            // The reference leaves this tile empty ("ToDo"), but this server counts the folders its files stand
+            // in, and the wall's screen claims the counting - so the tile has to ask for it by that word.
+            Assert.That(shortcut.BrowseBy, Is.EqualTo("location"),
+                "the Location tile of " + action + " no longer asks the counting the server answers");
+            Assert.That(FilterViewModel.OwnsItsOwnScreen(shortcut.BrowseBy), Is.True,
+                "the Location tile of " + action + " asks for a counting no screen claims, so the press lands "
+                + "on nothing");
+            continue;
+          }
+
+          if (shortcut.Label != "System" && shortcut.Label != "Size")
             continue;
 
           Assert.That(shortcut.BrowseBy, Is.Null,
