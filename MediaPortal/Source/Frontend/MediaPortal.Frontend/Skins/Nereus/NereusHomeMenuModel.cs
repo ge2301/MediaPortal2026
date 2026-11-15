@@ -75,7 +75,9 @@ namespace MediaPortal.Frontend.Skins.Nereus
             // track the house holds on one wall.  This front end's music arm stands on the albums, so the tile
             // names the tracks' own aspect and the press opens that shelf.
             new NereusHomeShortcut("Track", "MediaMenu/track", screenKey: "aspect/AudioItem"),
-            new NereusHomeShortcut("Album", "MediaMenu/album"),
+            // The album view the arm stands on anyway, reached straight from the tile: the same aspect question
+            // the Track tile asks, only asked of the records rather than of the songs.
+            new NereusHomeShortcut("Album", "MediaMenu/album", screenKey: "aspect/AlbumItem"),
             // The musicians a shelf of records was made by, which the counting of a record shelf never lists as
             // "actors" - the word was simply wrong here, and the wall it opens is the artists' own.
             new NereusHomeShortcut("Artist", "MediaMenu/artist"),

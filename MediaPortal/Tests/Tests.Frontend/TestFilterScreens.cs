@@ -791,6 +791,15 @@ namespace Tests.Frontend
           "the Track tile wears a key the press does not read as the tracks' own shelf, so it opens the albums "
           + "or nothing but a sentence");
 
+      // The Album tile asks the same aspect question of the records rather than the songs, which is the one
+      // shelf the viewer who wants the covers rather than the playlist sits down in front of.
+      MediaPortal.Frontend.Skins.Nereus.NereusHomeShortcut? album = model.ShortcutsFor(records)
+          .FirstOrDefault(shortcut => shortcut.Label == "Album");
+      Assert.That(album, Is.Not.Null, "the record arm lost its Album tile");
+      Assert.That(HomeView.AspectAskedByShortcut(album!.ScreenKey), Is.EqualTo("AlbumItem"),
+          "the Album tile wears a key the press does not read as the albums' own shelf, so it opens nothing but "
+          + "a sentence");
+
       foreach (string action in new[]
                {
                  "55556593-9fe9-436c-a3b6-a971e10c9d44",  // videos
@@ -815,10 +824,11 @@ namespace Tests.Frontend
     /// What the Track tile's press lands on: a shelf of tracks - the AudioItem aspect, not the albums the arm
     /// stands on - which is the reference's show-all-items screen.  The caught failure this stands against is the
     /// tile opening the album overview instead (viewer's word 2026-11-15: "Es zeigt die Albumübersicht nicht die
-    /// trackübersicht").
+    /// trackübersicht").  The Album tile beside it walks the same door to its own side of it: the viewer who wants
+    /// the covers rather than the playlist gets the covers.
     /// </summary>
     [AvaloniaTest]
-    public void TheTrackTileOpensTheShelfOfTracksAndNotTheAlbums()
+    public void TheTrackTileOpensTheShelfOfTracksAndTheAlbumTileTheShelfOfRecords()
     {
       CountingServer server = new CountingServer();
       var home = new HomeViewModel(server.Client());
@@ -865,9 +875,10 @@ namespace Tests.Frontend
                   .Any(button => button.Tag is HomeContentTile worn && worn.IsShortcut);
             });
 
-        Button tile = window.GetVisualDescendants().OfType<Button>()
+        Button track_tile = window.GetVisualDescendants().OfType<Button>()
             .First(button => button.Tag is HomeContentTile worn && worn.IsShortcut
-                && HomeView.AspectAskedByShortcut(worn.Shortcut?.ScreenKey) != null);
+                && string.Equals(HomeView.AspectAskedByShortcut(worn.Shortcut?.ScreenKey), "AudioItem",
+                    StringComparison.OrdinalIgnoreCase));
 
         // The tracks' shelf can only be opened from the tiles the server's aspect list built, so the reading a
         // connection asks for is asked here too; the entry that survives the rebuild is a fresh object though, so
@@ -878,7 +889,7 @@ namespace Tests.Frontend
         MainMenuEntry standing = home.SelectedEntry!;
         standing.Section = MUSIC;
 
-        tile.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent, tile));
+        track_tile.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent, track_tile));
         Pump();
 
         Assert.That(shelf, Is.Not.Null, "the track tile walked onto a shelf");
@@ -887,6 +898,21 @@ namespace Tests.Frontend
         Assert.That(shelf!.AspectName, Is.EqualTo("AudioItem"),
             "and it is the shelf of tracks, not the albums the arm stands on - the reference's show-all-items "
             + "screen shows every track, not every record");
+
+        // Back onto the arm, and the Album tile pressed: the same door, its other side.
+        workflow.Pop();
+        Pump();
+        Button album_tile = window.GetVisualDescendants().OfType<Button>()
+            .First(button => button.Tag is HomeContentTile worn && worn.IsShortcut
+                && string.Equals(HomeView.AspectAskedByShortcut(worn.Shortcut?.ScreenKey), "AlbumItem",
+                    StringComparison.OrdinalIgnoreCase));
+        album_tile.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent, album_tile));
+        Pump();
+
+        Assert.That(workflow.Current!.StateId, Is.EqualTo("titles"),
+            "the album tile walked onto a shelf of its own");
+        Assert.That(((MediaBrowserViewModel) workflow.Current.ViewModel).AspectName, Is.EqualTo("AlbumItem"),
+            "and it is the album view the viewer sat down in front of, not the playlist");
         window.Close();
       }
       finally
