@@ -14,3 +14,5 @@ TestResults/
 # this fork's source: the Avalonia MediaPortal.Frontend replaced them, and nothing references them.
 MediaPortal/Source/Main/MediaPortal.Client/
 MediaPortal/Source/Main/MediaPortal.ClientLauncher/
+MediaPortal/Source/MP2-Client.sln
+MediaPortal/Source/MP2-Client.sln.DotSettings
