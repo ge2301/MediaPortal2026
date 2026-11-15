@@ -105,7 +105,12 @@ namespace Tests.Frontend
         + "\"by\":\"year\",\"value\":\"2009\",\"titles\":["
         + "{\"id\":\"00000001-0000-0000-0000-000000000000\",\"title\":\"Alien\",\"year\":1979}]}";
 
-    /// <summary>A server that answers the counting URL with whatever it was handed and every titles URL with a shelf.</summary>
+    /// <summary>
+    /// A server that answers the counting URL with whatever it was handed, every titles URL with a shelf, and the
+    /// aspect list with the two shelves of music - the albums the arm stands on and the tracks the Track tile
+    /// asks for.  The aspect list matters because a home screen never fills its tiles without it, and a shortcut
+    /// that opens a shelf by its aspect has to find that shelf among the tiles.
+    /// </summary>
     private class CountingServer : HttpMessageHandler
     {
       private readonly string _groupsBody;
@@ -135,6 +140,18 @@ namespace Tests.Frontend
         {
           LastGroupsUrl = request.RequestUri.PathAndQuery;
           body = _groupsBody;
+        }
+        else if (path.EndsWith("/aspects", StringComparison.Ordinal))
+        {
+          body = "{\"count\":2,\"aspects\":["
+              + "{\"id\":\"33333333-3333-3333-3333-333333333333\",\"name\":\"AudioItem\",\"systemAspect\":false,"
+              + "\"transient\":false,\"referencingAspectId\":null,\"attributes\":[]},"
+              + "{\"id\":\"44444444-4444-4444-4444-444444444444\",\"name\":\"AlbumItem\",\"systemAspect\":false,"
+              + "\"transient\":false,\"referencingAspectId\":null,\"attributes\":[]}]}";
+        }
+        else if (path.EndsWith("/serverinfo", StringComparison.Ordinal))
+        {
+          body = "{\"name\":\"CountingServer\",\"version\":\"1.0\"}";
         }
         else
         {
@@ -770,8 +787,9 @@ namespace Tests.Frontend
       MediaPortal.Frontend.Skins.Nereus.NereusHomeShortcut? track = model.ShortcutsFor(records)
           .FirstOrDefault(shortcut => shortcut.Label == "Track");
       Assert.That(track, Is.Not.Null, "the record arm lost its Track tile");
-      Assert.That(HomeView.SortAskedByShortcut(track!.ScreenKey), Is.EqualTo("track"),
-          "the Track tile wears a key the press does not read as an order, so it opens nothing but a sentence");
+      Assert.That(HomeView.AspectAskedByShortcut(track!.ScreenKey), Is.EqualTo("AudioItem"),
+          "the Track tile wears a key the press does not read as the tracks' own shelf, so it opens the albums "
+          + "or nothing but a sentence");
 
       foreach (string action in new[]
                {
@@ -794,11 +812,13 @@ namespace Tests.Frontend
     }
 
     /// <summary>
-    /// What the Track tile's press lands on: the record shelf standing on the screen and read by the tracks'
-    /// numbers, which is the same door the shelf's own sort row walks through.
+    /// What the Track tile's press lands on: a shelf of tracks - the AudioItem aspect, not the albums the arm
+    /// stands on - which is the reference's show-all-items screen.  The caught failure this stands against is the
+    /// tile opening the album overview instead (viewer's word 2026-11-15: "Es zeigt die Albumübersicht nicht die
+    /// trackübersicht").
     /// </summary>
     [AvaloniaTest]
-    public void TheTrackTileOpensTheRecordShelfReadByItsNumbers()
+    public void TheTrackTileOpensTheShelfOfTracksAndNotTheAlbums()
     {
       CountingServer server = new CountingServer();
       var home = new HomeViewModel(server.Client());
@@ -847,9 +867,14 @@ namespace Tests.Frontend
 
         Button tile = window.GetVisualDescendants().OfType<Button>()
             .First(button => button.Tag is HomeContentTile worn && worn.IsShortcut
-                && HomeView.SortAskedByShortcut(worn.Shortcut?.ScreenKey) != null);
+                && HomeView.AspectAskedByShortcut(worn.Shortcut?.ScreenKey) != null);
 
+        // The tracks' shelf can only be opened from the tiles the server's aspect list built, so the reading a
+        // connection asks for is asked here too; the entry that survives the rebuild is a fresh object though, so
+        // its section - which the real reading fills from the aspects - is put on it by hand again.
         home.UseServer(server.Client());
+        home.RefreshAsync().GetAwaiter().GetResult();
+        WaitUntil("the home to read its tiles off the server", delegate { return home.Sections.Count > 0; });
         MainMenuEntry standing = home.SelectedEntry!;
         standing.Section = MUSIC;
 
@@ -859,8 +884,9 @@ namespace Tests.Frontend
         Assert.That(shelf, Is.Not.Null, "the track tile walked onto a shelf");
         Assert.That(workflow.Current!.StateId, Is.EqualTo("titles"),
             "the shelf stands on the screen, not merely built behind the home");
-        Assert.That(shelf!.SortOrder, Is.EqualTo("track"),
-            "and it is read by the tracks' numbers, as the reference's show-all-items screen reads them");
+        Assert.That(shelf!.AspectName, Is.EqualTo("AudioItem"),
+            "and it is the shelf of tracks, not the albums the arm stands on - the reference's show-all-items "
+            + "screen shows every track, not every record");
         window.Close();
       }
       finally

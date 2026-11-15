@@ -2107,19 +2107,18 @@ namespace MediaPortal.Frontend.Views
         return;
       }
 
-      // A sort tile is the shelf read in another order: the reference's "Track" tile opens the record shelf's
-      // "show all items" screen, which walks the tracks by their numbers rather than the wall's order by name.
-      // Like the search tile it walks through the shelf's own door - PickSortAsync is the row of the shelf's
-      // sort page and asks the server again exactly as a hand pressing that row does.
-      string? asked_sort = SortAskedByShortcut(shortcut.ScreenKey);
-      if (asked_sort != null && _home.SelectedEntry?.Section is HomeSection sorted
-          && _sectionScreen?.Invoke(sorted) is { } sortFrame
-          && sortFrame.ViewModel is MediaBrowserViewModel sorter)
+      // The reference's Track tile opens the record shelf's "show all items" screen: every track the house holds,
+      // stood on one wall rather than tucked inside its album.  This front end keeps albums and tracks apart -
+      // the music arm's shelf is the albums and pressing one walks inside it - so the tile asks the server for
+      // the tracks' own aspect directly, which is the same question the shelf inside an album asks with one
+      // album's id in it.  A shelf of nothing but numbers over the albums would be the wrong answer.
+      string? asked_aspect = AspectAskedByShortcut(shortcut.ScreenKey);
+      if (asked_aspect != null && _home.Client != null
+          && ShortcutSectionFor(_home, asked_aspect) is HomeSection tracks)
       {
-        // The shelf first, its order after: the reading the shelf starts with is remembered against the screen
-        // being stood on, and a shelf nobody stands on has no reading to change yet.
-        _workflow.Push(sortFrame);
-        _ = sorter.PickSortAsync(asked_sort);
+        WorkflowFrame shelfFrame = _sectionScreen?.Invoke(tracks) ?? new WorkflowFrame("titles", tracks.Label,
+            new MediaBrowserViewModel(_home.Client, tracks));
+        _workflow.Push(shelfFrame);
         return;
       }
 
@@ -2162,22 +2161,44 @@ namespace MediaPortal.Frontend.Views
     }
 
     /// <summary>
-    /// The order a shortcut tile asks the shelf to be read in, or null when the tile asks no order.  MP2 spells
-    /// the record shelf's Track tile as its show-all-items screen, whose only difference from the shelf the wall
-    /// opens is that its tracks stand in their numbers; the key says so as <c>sort/track</c>, and the word after
-    /// the slash is one of the orders the server answers.
+    /// The kind of shelf a shortcut tile asks for by name, or null when the tile asks none.  MP2 spells the
+    /// record shelf's Track tile as its show-all-items screen - every track in the house on one wall - and this
+    /// front end's music arm stands on the albums instead, so the tile has to say which aspect it wants: the key
+    /// reads <c>aspect/AudioItem</c>, spelled in the server's own name for the shelf.
     /// </summary>
-    internal static string? SortAskedByShortcut(string? screenKey)
+    internal static string? AspectAskedByShortcut(string? screenKey)
     {
       if (string.IsNullOrEmpty(screenKey))
         return null;
 
       int slash = screenKey!.LastIndexOf('/');
-      if (slash < 0 || !string.Equals(screenKey.Substring(0, slash).Trim(), "sort", StringComparison.OrdinalIgnoreCase))
+      if (slash < 0 || !string.Equals(screenKey.Substring(0, slash).Trim(), "aspect", StringComparison.OrdinalIgnoreCase))
         return null;
 
-      string sort = screenKey.Substring(slash + 1).Trim();
-      return string.Equals(sort, "track", StringComparison.OrdinalIgnoreCase) ? "track" : null;
+      string aspect = screenKey.Substring(slash + 1).Trim();
+      return aspect.Length == 0 ? null : aspect;
+    }
+
+    /// <summary>
+    /// The home's tile for one aspect of the server, so that a shortcut naming an aspect opens the shelf the
+    /// home would open for it - same label, same door back.  Falls back on the server's aspect list when the
+    /// tiles were not built yet, which is the same fallback the walls of people walk through.
+    /// </summary>
+    private static HomeSection? ShortcutSectionFor(HomeViewModel home, string aspectName)
+    {
+      foreach (HomeSection candidate in home.Sections)
+      {
+        if (string.Equals(candidate.Aspect?.Name, aspectName, StringComparison.OrdinalIgnoreCase))
+          return candidate;
+      }
+
+      foreach (AspectViewModel candidate in home.Aspects)
+      {
+        if (string.Equals(candidate.Name, aspectName, StringComparison.OrdinalIgnoreCase))
+          return new HomeSection(HomeSection.LabelFor(candidate.Name), candidate);
+      }
+
+      return null;
     }
 
     private void OnNereusTileGotFocus(object? sender, RoutedEventArgs args)
