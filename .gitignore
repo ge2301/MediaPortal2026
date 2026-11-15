@@ -9,3 +9,8 @@ TestResults/
 # the native BASS runtime, fetched by scripts/ci/get-bass.ps1 - Un4seen Developments does not allow
 # redistributing it, so the libraries are never committed, only downloaded by whoever wants the BASS engine
 /libs/
+
+# The old WPF client and its tray launcher stay on disk for reference but are not part of
+# this fork's source: the Avalonia MediaPortal.Frontend replaced them, and nothing references them.
+MediaPortal/Source/Main/MediaPortal.Client/
+MediaPortal/Source/Main/MediaPortal.ClientLauncher/
