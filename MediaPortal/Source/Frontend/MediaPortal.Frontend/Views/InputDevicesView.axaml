@@ -1,0 +1,95 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MediaPortal.Frontend.ViewModels"
+        xmlns:views="using:MediaPortal.Frontend.Views"
+        xmlns:theming="clr-namespace:MediaPortal.Frontend.Theming"
+        x:Class="MediaPortal.Frontend.Views.InputDevicesView"
+        x:DataType="vm:InputDevicesViewModel"
+        Name="inputDevices"
+        Background="Transparent"
+        >
+
+  <!--
+    The mapping editor the reference ships. Its FIRST screen is its DialogSelectDevice word for word: one help
+    line and the "press" picture, listening for one press that names its device - nothing to pick beside it,
+    because a device you can pick and a device you press are two answers to the same question and never both.
+    Its SECOND screen is the device's table of actions (its SelectAction page), and the re-binding step is a
+    line on that same table rather than a third dialog.
+  -->
+
+  <DockPanel Margin="48,14">
+
+    <!-- The chooser: the reference's master_dialog_bare contents - the help label centred on top and the
+         press.png picture centred under it. It fills the room between the hub's gradient bands on its own. -->
+    <StackPanel DockPanel.Dock="Top" Spacing="2" Margin="0,0,0,8">
+      <TextBlock Text="{Binding Heading}"
+                 FontSize="24"
+                 FontWeight="SemiBold"
+                 IsVisible="{Binding Editing}" />
+      <TextBlock Text="{Binding Subtitle}"
+                 FontSize="14"
+                 Opacity="0.7"
+                 TextWrapping="Wrap"
+                 MaxWidth="1500"
+                 HorizontalAlignment="Left" />
+      <!-- The reference's Cancel button of its learning dialog, shown while a row waits for its key. -->
+      <Button Content="Cancel"
+              Command="{Binding CancelMappingCommand}"
+              IsVisible="{Binding Waiting, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+              FontSize="16"
+              Focusable="True"
+              HorizontalAlignment="Left"
+              Margin="0,8,0,0" />
+      <TextBlock Text="{Binding Waiting}"
+                 IsVisible="{Binding Waiting, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                 FontSize="18"
+                 FontWeight="SemiBold"
+                 Margin="0,6,0,0" />
+    </StackPanel>
+
+    <!-- The chooser's picture: the very image the reference's DialogSelectDevice docked in its centre
+         (InputDevices-DialogSelectDevice.xaml, images/press.png), worn from the skin's own image folder. -->
+    <Image Source="{Binding Converter={x:Static views:SkinImageConverter.Instance}, ConverterParameter=press.png}"
+           Height="200"
+           Stretch="Uniform"
+           Margin="0,30,0,30"
+           HorizontalAlignment="Center"
+           VerticalAlignment="Center"
+           IsVisible="{Binding Choosing}"
+           IsHitTestVisible="False"/>
+
+    <!-- The device's table: action, what answers it today, and Clear beside an entry that can fall back.
+         OK on the stood-on row starts the "press the key now" step for it. No panel of its own: the rows
+         stand on the screen's black like the reference's dialogs, and only the stood-on row paints itself. -->
+    <ListBox Name="rowsList" theming:SkinTemplates.TileTemplate="BindingRowTemplate"
+             IsVisible="{Binding Editing}"
+             Focusable="True"
+             SelectionMode="Single"
+             Background="Transparent" BorderThickness="0" Padding="0"
+             ItemsSource="{Binding Rows}"
+             FontSize="18"
+             SelectionChanged="OnRowSelected">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:InputDevicesViewModel+ActionRow">
+          <Grid ColumnDefinitions="300,1*,Auto" ColumnSpacing="16" Margin="2,4">
+            <TextBlock Grid.Column="0"
+                       Text="{Binding Action}"
+                       FontSize="17" />
+            <TextBlock Grid.Column="1"
+                       Text="{Binding Keys}"
+                       FontSize="17"
+                       TextWrapping="Wrap"
+                       VerticalAlignment="Center" />
+            <Button Grid.Column="2"
+                    Content="Clear"
+                    Click="OnClear"
+                    IsVisible="{Binding Overridden}"
+                    FontSize="15"
+                    Focusable="True"
+                    VerticalAlignment="Center" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

@@ -350,6 +350,37 @@
   </DataTemplate>
 
   <!--
+    One action's row in the input devices editor, WMC's reading of it: a panel like every other row wears,
+    the action's name beside the keys that answer it today. Clear rides the row model's own command.
+  -->
+  <DataTemplate x:Key="BindingRowTemplate" x:DataType="vm:InputDevicesViewModel+ActionRow">
+    <Border Background="{DynamicResource PanelBrush}" Padding="14,5" Margin="0,3,8,5">
+      <Grid ColumnDefinitions="300,*,Auto" ColumnSpacing="16">
+        <TextBlock Grid.Column="0" Text="{Binding Action}" FontSize="18" FontWeight="Bold"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource TextBrush}"/>
+        <TextBlock Grid.Column="1" Text="{Binding Keys}" FontSize="15"
+                   TextWrapping="Wrap"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource MutedTextBrush}"/>
+        <Button Grid.Column="2" Content="Clear" Command="{Binding ClearMappingCommand}"
+                IsVisible="{Binding Overridden}"
+                FontSize="14"
+                Focusable="True"
+                VerticalAlignment="Center"/>
+      </Grid>
+    </Border>
+  </DataTemplate>
+
+  <!-- A device's name in the input devices chooser. -->
+  <DataTemplate x:Key="DeviceRowTemplate" x:DataType="x:String">
+    <Border Background="{DynamicResource PanelBrush}" Padding="14,6" Margin="0,3,8,5">
+      <TextBlock Text="{Binding}" FontSize="18" FontWeight="Bold"
+                 Foreground="{DynamicResource TextBrush}"/>
+    </Border>
+  </DataTemplate>
+
+  <!--
     A server the finder discovered: WMC gives it a band of panel blue - name in the big bold type,
     address and version in muted type under it.
   -->

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -29,6 +31,16 @@ namespace MediaPortal.Frontend.Views
   {
     private readonly SettingsViewModel _model;
 
+    /// <summary>
+    /// The nod the wall gives a key that points past its edge: the plates lean toward the wall and spring
+    /// back, the same answer the home's shelves give (see <see cref="ShelfNod"/>). It hangs on the host the
+    /// wall scrolls in, so the whole visible wall - every plate at once - nods as one ground.
+    /// </summary>
+    private readonly ShelfNod _wallNods = new ShelfNod();
+
+    /// <summary>The scrollviewer the wall of plates stands in, found once it is drawn.</summary>
+
+
     private readonly List<Control> _ring = new List<Control>();
 
     /// <summary>For the XAML loader: an empty hub, which the designer shows as an empty list.</summary>
@@ -44,8 +56,6 @@ namespace MediaPortal.Frontend.Views
       InitializeComponent();
 
       _ring.Add(wallList);
-      _ring.Add(sectionList);
-      _ring.Add(backButton);
       DpadNavigation.Attach(this, _ring);
 
       // The wall is walked with the caret of the keyboard, not with the list's selection: a picked plate IS
@@ -55,6 +65,24 @@ namespace MediaPortal.Frontend.Views
       // from plate to plate, and answers Enter as the press of the plate stood on. A direction nobody stands
       // under - no plate has the caret, or the wall ends in that direction - is left for the ring above.
       wallList.AddHandler(KeyDownEvent, OnWallKeysTunnel, RoutingStrategies.Tunnel);
+
+      // Back belongs to the hub before it belongs to anything inside an open page: most pages never claim it
+      // (a FanArt cache page, a metadata page, a plain list), and a key nobody claims bubbles out to the
+      // shell - whose only back answer is to pop the whole Settings frame, landing the viewer on Home from
+      // three levels deep. Heard on the BUBBLE road at handledEventsToo, this sees every unclaimed Back that
+      // came from inside the hub - after any page that DOES claim one (the input devices editor steps its
+      // table back to its chooser first) has left the field - and takes exactly one step down the hub's own
+      // trail. A Back the hub cannot spend (its first level) stays unhandled for the shell, which leaves.
+      AddHandler(KeyDownEvent, delegate (object? sender, KeyEventArgs e)
+      {
+        if (e.Handled || !Settings.KeyBindings.Current.Is(Settings.KeyAction.Back, e))
+          return;
+        if (!StepBackInsideHub())
+          return;
+        e.Handled = true;
+        Target().Focus();
+        StandCaretOn(Target(), CARET_TRIES);
+      }, RoutingStrategies.Bubble, handledEventsToo: true);
 
       // Both lists show the level and only one of them is ever looked at, and a press leaves a number behind in
       // whichever held it - the number of the plate last pressed, which the control walks back to on the next
@@ -74,10 +102,30 @@ namespace MediaPortal.Frontend.Views
       // first layout came), the wall coming back from beside a page (the hub's IsWall word), and the level
       // changing above.
       contentHost.SizeChanged += delegate { FitWall(); };
+
+      // The screen an open page stands on. A page arms itself when it joins the window - but the hub builds
+      // it detached and swaps it in, so "joined" can land a beat after another pick already replaced the
+      // page; the page asks its hub whether it is still the one open before it claims anything.
+      OpenedScreen = sections.CurrentView as Control;
       _model.PropertyChanged += delegate (object? sender, System.ComponentModel.PropertyChangedEventArgs e)
       {
         if (e.PropertyName == nameof(SettingsViewModel.IsWall) && wallScale.IsVisible)
           FitWall();
+
+        // The corner word names the room that is looked at, and an open page or a fold back into the wall
+        // is another room.
+        if (e.PropertyName == nameof(SettingsViewModel.ScreenName))
+          ApplyHeaderTitle();
+
+        // An open screen is now the whole room, so the keyboard belongs to it rather than staying on the plate
+        // that was pressed. A page may name a control of its own through AskFocusFrom; until such a control can
+        // be drawn - or when the page names none - the hub stands on whatever inside the screen will take the
+        // keyboard, bounded like everywhere else here.
+        if (e.PropertyName == nameof(SettingsViewModel.CurrentView))
+        {
+          OpenedScreen = sections.CurrentView as Control;
+          StandOnOpenScreen(CARET_TRIES);
+        }
       };
 
       // No SECTION opens itself on arrival: opening the first one instead would be the hub deciding what a
@@ -93,17 +141,75 @@ namespace MediaPortal.Frontend.Views
       AttachedToVisualTree += delegate
       {
         _chromeShell = this.GetVisualAncestors().OfType<ShellWindow>().FirstOrDefault();
-        _chromeShell?.SetChromeHeaderOverlay(true);
+        // The room wears no head line at all: neither the clock cluster nor the notification marks of the
+        // header stand here - the viewer asked for the recording, connection and notice pictures to go, and
+        // with them the title they carried. What the screen shows is said instead by one quiet word at the
+        // foot of the window (SetScreenCaptionShown), which follows the level walked into.
+        _chromeShell?.SetChromeHeaderStowed(true);
+        _chromeShell?.SetScreenCaptionShown(true);
         ApplyHeaderTitle();
+        // Joining the tree IS arriving here for the hub, but only joining the WINDOW makes drawing possible:
+        // on the machine the view joins the tree while it is still detached from the window - the log said
+        // "list bounds 0x0, listAttached=false" - so every caret ask at this moment lands nowhere. The first
+        // real layout pass is waited for instead, and the caret is stood on it, which is the one moment a
+        // plate can exist and take the keyboard.
+        WaitFirstLayoutThenStandTheCaret();
       };
       DetachedFromVisualTree += delegate
       {
-        _chromeShell?.SetChromeHeaderOverlay(false);
+        _chromeShell?.SetChromeHeaderStowed(false);
+        _chromeShell?.SetScreenCaptionShown(false);
         _chromeShell = null;
       };
     }
 
+    /// <summary>
+    /// Stands the caret once the wall can actually carry it: a plate only exists once the view stands inside
+    /// a drawn window, and on the machine that is a pass later than the moment the hub joins the tree (the
+    /// workflow builds screens detached and shows them afterwards). A bounded timer asks every layout beat
+    /// whether the list has grown its first container; when it has, the caret is stood as before. The number
+    /// of beats is generous because a television box lays out slower than the bench, and the ask gives up
+    /// rather than tick forever if the screen is walked away from.
+    /// </summary>
+    private void WaitFirstLayoutThenStandTheCaret()
+    {
+      int beats_left = 120; // two seconds' worth of layout beats
+      DispatcherTimer waiting = new DispatcherTimer(DispatcherPriority.Loaded)
+      {
+        Interval = TimeSpan.FromMilliseconds(16)
+      };
+      waiting.Tick += delegate
+      {
+        if (!IsLoaded || !IsVisible)
+        {
+          if (--beats_left <= 0)
+            waiting.Stop(); // gone again - nothing to stand on here
+          return;
+        }
+
+        bool drawn = wallList.IsLoaded && wallList.Items.Count > 0
+            && wallList.ContainerFromIndex(0) != null;
+        if (drawn || --beats_left <= 0)
+        {
+          waiting.Stop();
+          if (_model.ShowingContents)
+            StandOnOpenScreen(CARET_TRIES);
+          else
+            StandCaretOn(Target(), CARET_TRIES);
+        }
+      };
+      waiting.Start();
+    }
+
     private ShellWindow? _chromeShell;
+
+    /// <summary>
+    /// The screen the hub is showing right now, as the view sees it. A page that arms itself on joining the
+    /// window asks this whether it is still the one open - the hub builds pages detached and swaps them in,
+    /// so a page can join the tree a beat after the viewer already picked something else, and an old page
+    /// claiming the keyboard or the next key press would steal it from the screen actually on show.
+    /// </summary>
+    public Control? OpenedScreen { get; private set; }
 
     /// <summary>
     /// The scale the wall stands at right now; 0 while none has ever been written. Half a thousandth is
@@ -217,15 +323,14 @@ namespace MediaPortal.Frontend.Views
     }
 
     /// <summary>
-    /// Tells the shell header which word to show for this screen. The header names itself after the workflow
-    /// frame, and the whole hub lives on one frame labelled "Settings" - so walking into "General" or deeper
-    /// would otherwise leave the header reading "Settings" over a wall that is plainly something else. The hub
-    /// knows its own trail, so it hands the shell the door it last walked through; back on the first wall that
-    /// word is just "Settings" again. See <see cref="ShellWindow.SetChromeTitle"/>.
+    /// Tells the shell which word stands at the foot of the window for this screen. The hub lives on one
+    /// workflow frame labelled "Settings", so a level walked into would otherwise keep the frame's word;
+    /// the corner caption instead names the room actually being looked at - an open page, a folder's wall,
+    /// or the first wall. See <see cref="ShellWindow.SetScreenCaption"/>.
     /// </summary>
     private void ApplyHeaderTitle()
     {
-      _chromeShell?.SetChromeTitle(_model.HeaderTitle);
+      _chromeShell?.SetScreenCaption(_model.ScreenName);
     }
 
     /// <summary>
@@ -235,7 +340,6 @@ namespace MediaPortal.Frontend.Views
     private void ForgetPlaces()
     {
       Forget(wallList);
-      Forget(sectionList);
     }
 
     private static void Forget(ListBox list)
@@ -252,18 +356,112 @@ namespace MediaPortal.Frontend.Views
       // word is spoken again here because this call is the hub's notice that it is back on screen.
       ApplyHeaderTitle();
 
-      Control target = Target();
-      target.Focus();
-      StandCaretOn(target, CARET_TRIES);
+      if (_model.ShowingContents)
+        StandOnOpenScreen(CARET_TRIES); // returning to a frame over the hub returns to the open page too
+      else
+        StandCaretOn(Target(), CARET_TRIES);
     }
 
-    private void OnBackClick(object? sender, RoutedEventArgs e)
+    /// <summary>
+    /// Where the shell's net starts looking for the keyboard: the wall of plates while a wall stands, and
+    /// nothing while a page is open. The "nothing" is deliberate: without it the net takes the first
+    /// focusable control in tree order, which is a plate of the invisible wall behind the page - the keys
+    /// then walk around on a wall nobody can see, and every press lands on the wrong thing. A page holds
+    /// its own keyboard (see StandOnOpenScreen), so the net has nothing to improve there.
+    /// See <see cref="IWorkflowScreen.KeysStartAt"/>.
+    /// </summary>
+    public Control? KeysStartAt()
     {
-      if (_model.GoBack())
+      return _model.ShowingContents ? null : wallList;
+    }
+
+    /// <summary>
+    /// A page opened beside the lists asking the keyboard for one of its own controls - the input devices
+    /// editor hands over its chooser so that the first key a viewer presses means something inside the page.
+    /// The hub takes the ask by handing it to the model, which stands the keyboard on it as soon as the control
+    /// can be drawn for it.
+    /// </summary>
+    public void AskFocusFrom(Control wanted)
+    {
+      _model.FocusWanted = wanted;
+      if (_model.ShowingContents)
+        StandOnOpenScreen(CARET_TRIES); // the asked control may need a layout pass before it can take the keyboard
+    }
+
+    /// <summary>
+    /// Moving the keyboard onto the screen that is open: the control the page asked for, failing that the first
+    /// focusable thing inside it. The content host has only a ContentControl standing in the page's rows, so an
+    /// ask that lands on nothing yet is repeated a bounded number of layout passes later, while the same screen
+    /// is still the one open. A list that takes the keyboard is not enough - the viewer must SEE where they
+    /// stand - so the first row's container is focused too, without selecting it (a selection here would open
+    /// the entry).
+    /// </summary>
+    private void StandOnOpenScreen(int tries)
+    {
+      Control? view = _model.CurrentView;
+      if (view == null || !_model.ShowingContents)
+        return;
+
+      if (StandOnOpenScreenOnce(view))
+        return;
+
+      if (tries <= 0)
+        return;
+
+      // The retry rides a timer, not a posted delegate - see StandCaretOn for why a self-re-posting Loaded
+      // delegate grows the stack instead of the queue.
+      Control was = view;
+      DispatcherTimer asking = new DispatcherTimer(DispatcherPriority.Loaded)
       {
-        Target().Focus();
-        StandCaretOn(Target(), CARET_TRIES);
+        Interval = TimeSpan.FromMilliseconds(16)
+      };
+      asking.Tick += delegate
+      {
+        if (!_model.ShowingContents || !ReferenceEquals(_model.CurrentView, was))
+        {
+          asking.Stop(); // the viewer walked on while the layout was settling
+          return;
+        }
+
+        if (StandOnOpenScreenOnce(was))
+        {
+          asking.Stop();
+          return;
+        }
+
+        if (--tries <= 0)
+          asking.Stop();
+      };
+      asking.Start();
+    }
+
+    /// <summary>
+    /// One attempt at putting the keyboard onto the open screen: the control it asked for, the screen itself,
+    /// or the first focusable thing inside it. Answers whether the keyboard came to rest there.
+    /// </summary>
+    private bool StandOnOpenScreenOnce(Control view)
+    {
+      Control? wanted = _model.FocusWanted;
+      if (wanted != null && wanted.Focus())
+      {
+        if (wanted is ListBox stood)
+          StandCaretOnPlate(stood, 0);
+        return true;
       }
+
+      if (view.IsKeyboardFocusWithin)
+        return true; // the page already holds the keyboard, wherever inside it it chose to stand
+
+      if (view.Focus())
+        return true;
+
+      foreach (Control child in view.GetVisualDescendants().OfType<Control>())
+      {
+        if (child.Focusable && child.IsEffectivelyVisible && child.Focus())
+          return true;
+      }
+
+      return false;
     }
 
     /// <summary>
@@ -274,32 +472,94 @@ namespace MediaPortal.Frontend.Views
     private const int CARET_TRIES = 6;
 
     /// <summary>
-    /// Stands the caret ON a plate: the first plate of a wall - never picked, only focused, because a picked
-    /// plate here is an opened section - or the row of the narrowed list that shows the open screen, which
-    /// is the row the list has already picked. Asks again every layout pass while the list has kept the
-    /// keyboard, because the containers may not be drawn the moment the screen is activated.
+    /// Stands the caret ON a row of the wall: the first row - never picked, only focused, because a picked
+    /// plate here is an opened section. Asks again on a timer while the list holds the keyboard, because the
+    /// containers may not be drawn the moment the screen is activated. Named apart from its Control-taking
+    /// sibling on purpose: same-name overloads that dispatch through a base-typed argument are how this
+    /// method ended up calling itself twenty-four thousand deep.
     /// </summary>
-    private static void StandCaretOn(Control target, int tries)
+    private void StandCaretOnPlate(ListBox list, int tries)
     {
-      if (target is not ListBox list)
-        return;
-
-      int index = list.SelectedIndex >= 0 ? list.SelectedIndex : 0;
-      if (list.Items.Count > 0
-          && list.ContainerFromIndex(index) is Control plate && plate.IsEffectivelyVisible && plate.Focus())
+      // The caret is the focus here: a picked plate IS an opened section, so standing on the wall means
+      // focusing a plate WITHOUT selecting it. Avalonia's own focus navigation would set SelectedIndex (and
+      // open a section); that is why every arrow of this wall is answered by hand below.
+      if (StandThePlate(list))
         return;
 
       if (tries <= 0 || list.Items.Count == 0)
         return;
 
       list.Focus();
-      Dispatcher.UIThread.Post(
-          delegate
-          {
-            if (list.IsKeyboardFocusWithin)
-              StandCaretOn(list, tries - 1);
-          },
-          DispatcherPriority.Loaded);
+
+      // A plate can only take the keyboard once it has been DRAWED, and on the machine that is a second or
+      // more after the screen came up - the wall is laid out slowly there. Asking six times over a tenth of
+      // a second asked before the plates existed at all (the log said so: container null at every ask, and
+      // one second later the first arrow found them drawn). So the asking spans two seconds instead, and
+      // stops the moment a plate holds the keyboard.
+      DispatcherTimer asking = new DispatcherTimer(DispatcherPriority.Loaded)
+      {
+        Interval = TimeSpan.FromMilliseconds(50)
+      };
+      tries = 40;
+      asking.Tick += delegate
+      {
+        if (!list.IsKeyboardFocusWithin || list.Items.Count == 0)
+        {
+          asking.Stop(); // the keys left the wall, or the wall emptied - nothing further to stand on
+          return;
+        }
+
+        // The shell's net hands the keys to the LIST itself while no plate exists to hold them. That is not
+        // the caret: a list with the keyboard and no plate under it shows nothing and answers no arrow. As
+        // long as the keys sit on the bare list, the asking keeps going until a plate is drawn.
+        if (StandThePlate(list))
+        {
+          asking.Stop();
+          return;
+        }
+
+        if (--tries <= 0)
+        {
+          asking.Stop(); // asked as often as a wall is worth asking; where it stands now is where it stands
+        }
+      };
+      asking.Start();
+    }
+
+    /// <summary>
+    /// One attempt at standing the caret: focuses the plate the caret belongs to (the selected row's, else
+    /// the first) without selecting anything. Answers whether the plate took the keyboard.
+    /// </summary>
+    private static bool StandThePlate(ListBox list)
+    {
+      int index = list.SelectedIndex >= 0 ? list.SelectedIndex : 0;
+      if (list.Items.Count == 0)
+        return false;
+
+      Control? plate = list.ContainerFromIndex(index) as Control;
+      if (plate == null)
+        return false; // not drawn yet - the caller keeps asking until the first layout pass draws it
+
+      // A plate that cannot show itself cannot take the keyboard either, and asking it anyway is worse than
+      // waiting: Avalonia walks focus up to the list when the item refuses, which looks like a working caret
+      // until the first arrow key proves otherwise.
+      if (!plate.IsEffectivelyVisible || !plate.IsEffectivelyEnabled)
+        return false;
+
+      plate.Focus();
+      return list.IsKeyboardFocusWithin;
+    }
+
+    /// <summary>
+    /// The wall's caret asked for by control: only a list of plates can carry a caret, and anything else the
+    /// hub may name (a page's plain view) is simply not stood on. Named apart from <see cref="StandCaretOnPlate"/>
+    /// because two same-named overloads dispatching through a base-typed argument are what once made this
+    /// call itself forever.
+    /// </summary>
+    private void StandCaretOn(Control target, int tries)
+    {
+      if (target is ListBox list)
+        StandCaretOnPlate(list, tries);
     }
 
     /// <summary>The number of the plate the caret stands on, or -1 while no plate of the wall has it.</summary>
@@ -392,8 +652,29 @@ namespace MediaPortal.Frontend.Views
         _ => -2
       };
 
-      if (to == -2 || to < 0 || to >= wallList.Items.Count)
-        return; // not an arrow, or the wall ends that way - the ring above takes the key from here
+      if (to == -2)
+        return; // not an arrow
+
+      // The wall is fitted to the screen as a whole (FitWall shrinks it until every plate stands on the
+      // television), so where no neighbour exists there is nothing to scroll to either: the absence of a
+      // row or plate in the direction asked IS the edge. Earlier this asked the scroller whether it could
+      // still travel, and since a fitted wall never scrolls the answer was "no edge" - the bounce never
+      // leaned on the machine. One wall now answers all four sides.
+      if (to < 0)
+      {
+        NodWall(e.Key == Key.Left ? -ShelfRail.RAIL_BOUNCE_DIVE : 0,
+                e.Key == Key.Down ? ShelfRail.RAIL_BOUNCE_DIVE : (e.Key == Key.Up ? -ShelfRail.RAIL_BOUNCE_DIVE : 0));
+        e.Handled = true;
+        return;
+      }
+
+      if (to >= wallList.Items.Count)
+      {
+        // The last plate of the last row: right into the side wall.
+        NodWall(ShelfRail.RAIL_BOUNCE_DIVE, 0);
+        e.Handled = true;
+        return;
+      }
 
       if (wallList.ContainerFromIndex(to) is Control next && next.IsEffectivelyVisible)
       {
@@ -410,6 +691,24 @@ namespace MediaPortal.Frontend.Views
       StandOnRealizedPlate(to, CARET_TRIES);
     }
 
+    /// <summary>
+    /// Leans the wall's visible ground toward the wall the viewer pointed at and springs it back. Nods the
+    /// scroller rather than one plate because the wall scrolls as one ground and every plate on the screen
+    /// should say "edge" together, the way the shelf's rail does.
+    /// </summary>
+    private void NodWall(double diveX, double diveY)
+    {
+      // The ground that leans is the scaled host of the wall: the wall scrolls as one ground and every plate
+      // on the screen should say "edge" together, the way the shelf's rail does. There is no ScrollViewer
+      // around this wall (it is fitted to the screen so it never scrolls), and leaning the ListBox alone
+      // would lean only the plates' block - the host carries the whole of it.
+      Control? ground = wallScale;
+      if (ground == null)
+        return;
+
+      _wallNods.Nod(ground, diveX, diveY);
+    }
+
     private void StandOnRealizedPlate(int index, int tries)
     {
       if (wallList.ContainerFromIndex(index) is Control plate && plate.IsEffectivelyVisible)
@@ -421,35 +720,66 @@ namespace MediaPortal.Frontend.Views
       if (tries <= 0)
         return;
 
-      Dispatcher.UIThread.Post(
-          delegate
-          {
-            if (wallList.IsKeyboardFocusWithin && _model.IsWall)
-              StandOnRealizedPlate(index, tries - 1);
-          },
-          DispatcherPriority.Loaded);
+      // The retry rides a timer, not a posted delegate: a delegate that re-posts itself from inside its own
+      // invocation grows the stack one frame per ask (Avalonia pumps lower priorities from within a Loaded
+      // item), which is how this file crashed twice with a stack overflow. A timer tick always runs at the
+      // top of the queue.
+      DispatcherTimer asking = new DispatcherTimer(DispatcherPriority.Loaded)
+      {
+        Interval = TimeSpan.FromMilliseconds(16)
+      };
+      asking.Tick += delegate
+      {
+        if (!wallList.IsKeyboardFocusWithin || !_model.IsWall)
+        {
+          asking.Stop();
+          return;
+        }
+
+        if (wallList.ContainerFromIndex(index) is Control stood && stood.IsEffectivelyVisible)
+        {
+          stood.Focus();
+          asking.Stop();
+          return;
+        }
+
+        if (--tries <= 0)
+          asking.Stop();
+      };
+      asking.Start();
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
-      // The back key, for a viewer on a keyboard. The remote's Back reaches the same answer through the shell;
-      // this is the hub's own half of it, which stops at the first level and hands the key back from there.
-      if (Settings.KeyBindings.Current.Is(Settings.KeyAction.Back, e) && _model.GoBack())
-      {
-        e.Handled = true;
-        Target().Focus();
-        StandCaretOn(Target(), CARET_TRIES);
-        return;
-      }
+      // The back key has its answer in the hub's constructor, on the bubble road with handledEventsToo -
+      // one step down the trail before any page's unclaimed Back reaches the shell.
 
       base.OnKeyDown(e);
     }
 
-    /// <summary>The list the viewer is actually looking at, so that a press after going back walks the level
-    /// they landed on rather than the one they left.</summary>
+    /// <summary>
+    /// Takes exactly one step down the hub's own trail: out of an open screen onto the wall that held its
+    /// plate, or from a folder's wall up to the level above it. Answers whether the step was spent; false
+    /// means the hub stands at its first level and the caller may leave the room. The shell window asks this
+    /// directly when a Back bubbles past the hub without meeting the keyboard inside it, so a deep page is
+    /// never mistaken for the door.
+    /// </summary>
+    public bool StepBackInsideHub()
+    {
+      if (!_model.GoBack())
+        return false;
+
+      var back = Target();
+      back.Focus();
+      StandCaretOn(back, CARET_TRIES);
+      return true;
+    }
+
+    /// <summary>The control a press after going back walks from: the wall of plates. An open screen keeps its
+    /// own keyboard (the page itself, or the list it asked for), so the hub names no target while one stands.</summary>
     private Control Target()
     {
-      return _model.IsWall ? wallList : (Control) sectionList;
+      return wallList;
     }
   }
 }

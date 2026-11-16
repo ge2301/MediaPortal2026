@@ -343,6 +343,27 @@ namespace MediaPortal.Frontend.Views
       _layout.Children.Add(_screenArea);
       _layout.Children.Add(_footer);
 
+      // The corner word of the room: one name - of the screen that is open - standing low at the left edge
+      // over the screen's own row, so it reads against the skin's bottom gradient the way the reference put
+      // such words there. It belongs to no header and steals nothing from any screen: it starts away and
+      // only a screen that asks (see SetScreenCaptionShown) brings it out. Hit tests pass through it for the
+      // same reason the floating header does - a word that swallowed clicks off its corner would be a label
+      // that stole from the picture it labels.
+      _screenCaption.Name = "ScreenCaption";
+      _screenCaption.Focusable = false;
+      _screenCaption.IsHitTestVisible = false;
+      _screenCaption.IsVisible = false;
+      _screenCaption.Opacity = 0.6;
+      _screenCaption.FontSize = 28;
+      _screenCaption.Foreground = new SolidColorBrush(Color.FromRgb(0xE8, 0xEE, 0xF4));
+      _screenCaption.HorizontalAlignment = HorizontalAlignment.Left;
+      _screenCaption.VerticalAlignment = VerticalAlignment.Bottom;
+      _screenCaption.Margin = new Avalonia.Thickness(28, 0, 0, 18);
+      _screenCaption.TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis;
+      Grid.SetRow(_screenCaption, ROW_SCREEN);
+      _screenCaption.ZIndex = 9;
+      _layout.Children.Add(_screenCaption);
+
       // The superlayer floats over all of it - header, screen, footer - exactly as the reference's volume and
       // busy layers covered the whole master window.
       Panel shell = new Panel();
@@ -1531,6 +1552,18 @@ namespace MediaPortal.Frontend.Views
     }
 
     /// <summary>
+    /// Lets one screen take the clock-and-date cluster out of the head line. The reference's settings masters
+    /// drew no clock in their header - only the home and its picture screens carried one - so a viewer who
+    /// stands in a settings room reads the title alone, the way the reference read it. A screen asks on the way
+    /// in and says the answer again on the way out (the ask is level-driven, not edge-driven: a workflow that
+    /// resets straight to the home never passes through the settings door), so the home never loses its time.
+    /// </summary>
+    public void SetChromeHeadlineShown(bool shown)
+    {
+      _chrome.ShowHeadline = shown;
+    }
+
+    /// <summary>
     /// Sets the word the header shows for the screen on screen. The shell names the header after the frame
     /// the workflow stands on, which is right for every screen that IS its frame - but the settings hub
     /// holds levels inside one frame, and a viewer who walked into "General" still read "Settings" over the
@@ -1540,6 +1573,33 @@ namespace MediaPortal.Frontend.Views
     public void SetChromeTitle(string title)
     {
       _chrome.ScreenTitle = title;
+    }
+
+    private readonly TextBlock _screenCaption = new TextBlock();
+    private bool _screenCaptionShown;
+
+    /// <summary>
+    /// Puts one quiet word about the room in the bottom left corner of the window: the name of what the
+    /// screen is showing right now. The settings hub asked for this when it asked for its gradients - a
+    /// room that stows the notification header above still has to say where the viewer stands, and the
+    /// reference said such words low against its bottom gradient rather than high against the top one.
+    /// The word wears sixty percent of its strength, because it labels the picture rather than leads it.
+    /// One ask covers the whole visit; a screen that wants it asks on the way in and takes it away on the
+    /// way out.
+    /// </summary>
+    public void SetScreenCaptionShown(bool shown)
+    {
+      if (_screenCaptionShown == shown)
+        return;
+
+      _screenCaptionShown = shown;
+      _screenCaption.IsVisible = shown;
+    }
+
+    /// <summary>Says the word the corner caption of the window shows. See <see cref="SetScreenCaptionShown"/>.</summary>
+    public void SetScreenCaption(string text)
+    {
+      _screenCaption.Text = text;
     }
 
     private static object? FindResource(string key)
@@ -1671,11 +1731,28 @@ namespace MediaPortal.Frontend.Views
     /// </summary>
     private bool StepBackOneLayer()
     {
-      if (!_volumePicker.IsOpen)
-        return false;
+      if (_volumePicker.IsOpen) {
+        _volumePicker.Close();
+        return true;
+      }
 
-      _volumePicker.Close();
-      return true;
+      // The settings hub walks a trail of its own - a page back to its folder's wall, a wall back to the
+      // picked section. It is asked here as well as by its own key handler because the keyboard can stand
+      // outside the hub's subtree (a control that never took it, or one that has since been thrown away);
+      // when it does, the Back bubbles straight to this window, and popping a whole workflow frame from
+      // there would drop the viewer out of the room instead of up one step.
+      // The settings hub walks a trail of its own - a page back to its folder's wall, a wall back to the
+      // picked section. It is asked here as well as by its own key handler because the keyboard can stand
+      // outside the hub's subtree (a control that never took it, or one that has since been thrown away);
+      // when it does, the Back bubbles straight to this window, and popping a whole workflow frame from
+      // there would drop the viewer out of the room instead of up one step.
+      if (_workflow.Stack.Count > 1
+          && _workflow.Current?.View is Views.SettingsView hub) {
+        if (hub.StepBackInsideHub())
+          return true;
+      }
+
+      return false;
     }
 
     public bool KeyboardOpen => _keyboardLayer.IsVisible;

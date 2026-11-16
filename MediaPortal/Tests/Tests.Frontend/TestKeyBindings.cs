@@ -137,8 +137,67 @@ namespace Tests.Frontend
     }
 
     /// <summary>
-    /// The file a viewer has on disk when the front end has moved a question to a key of its own since the file
-    /// was written. Until the 26th of October the media menu and the details were the same I, and the split left
+    /// The per-device section: one pad's own answer laid over the global table, an unknown device costing
+    /// nothing, and the old global-only file loading unchanged. This is what lets a gamepad's B back while the
+    /// remote's back key keeps its own job - two hands steering, each with its own gestures.
+    /// </summary>
+    [Test]
+    public void ADeviceEntryOverridesTheGlobalsTableForThatDeviceAlone()
+    {
+      string file = Path.Combine(Path.GetTempPath(), "mp2-keys-" + Guid.NewGuid().ToString("N") + ".json");
+      File.WriteAllText(file, ("{ 'bindings': { 'Back': ['Escape', 'BrowserBack'] },"
+          + " 'devices': { 'Fake Pad': { 'bindings': { 'Back': ['F8'] } } } }").Replace('\'', '"'));
+      try
+      {
+        KeyBindings read = KeyBindings.Load(file, out string problem);
+        Assert.That(problem, Is.Null);
+
+        KeyBindings merged = KeyBindings.Merged(read, KeyBindings.TheDefaults(), out _);
+
+        KeyBindings pad = merged.ForDevice("Fake Pad");
+        Assert.That(pad.Is(KeyAction.Back, Key.F8), Is.True,
+            "this pad's back button reports F8 and nobody else's does");
+        Assert.That(pad.Is(KeyAction.Back, Key.Escape), Is.False,
+            "the device entry replaced the list rather than growing it, like a global entry does");
+
+        KeyBindings keyboard = merged.ForDevice(null);
+        Assert.That(keyboard.Is(KeyAction.Back, Key.Escape), Is.True,
+            "everybody else still answers the global table");
+        Assert.That(merged.ForDevice("A Pad That Was Never Plugged").Is(KeyAction.Back, Key.Escape), Is.True,
+            "and an unknown device simply never matches - a hand-edited entry for a missing pad costs nothing");
+
+        // An action the device entry forgot keeps the global answer, which kept the default.
+        Assert.That(pad.Is(KeyAction.Select, Key.Enter), Is.True,
+            "a device table of its own silences nothing the device did not name");
+      }
+      finally
+      {
+        File.Delete(file);
+      }
+    }
+
+    /// <summary>The old format - no devices section at all - loads and merges exactly as it always did.</summary>
+    [Test]
+    public void AGlobalOnlyFileStillLoadsAsItAlwaysDid()
+    {
+      string file = Path.Combine(Path.GetTempPath(), "mp2-keys-" + Guid.NewGuid().ToString("N") + ".json");
+      File.WriteAllText(file, "{ 'bindings': { 'Menu': ['F5'] } }".Replace('\'', '"'));
+      try
+      {
+        KeyBindings read = KeyBindings.Load(file, out string problem);
+        Assert.That(problem, Is.Null);
+        Assert.That(read.Devices, Is.Empty);
+
+        KeyBindings merged = KeyBindings.Merged(read, KeyBindings.TheDefaults(), out _);
+        Assert.That(merged.Is(KeyAction.Menu, Key.F5), Is.True);
+        Assert.That(merged.ForDevice("Any Pad").Is(KeyAction.Menu, Key.F5), Is.True,
+            "without a device table every device answers the global one");
+      }
+      finally
+      {
+        File.Delete(file);
+      }
+    }
     /// every existing file binding the details to the keys the menu had taken - which took the letter away from
     /// the details and gave one key to two questions. Such an entry is the leftover of a split and not a choice,
     /// so it is read as that; what a viewer chose themselves is never read away.

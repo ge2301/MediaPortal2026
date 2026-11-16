@@ -86,6 +86,15 @@ namespace MediaPortal.Frontend.Settings
   /// </summary>
   /// <remarks>
   /// <para>
+  /// <b>This is the front end's one action router.</b> Every input source - the keyboard, a remote whose button
+  /// the windowing system named or did not name, the mouse turned into an Enter by <c>MouseRemote</c>, a gamepad
+  /// turned into keys by <c>GamepadRemote</c>, and every device source still to come - reaches a screen through
+  /// the questions this class answers, and only through them. A new device component translates its platform's
+  /// language into a key this table knows and raises it once; it never carries its own action logic past this
+  /// point. That is what keeps the promise the reference needed a <c>Handled</c> flag for: one press, one answer,
+  /// because there is exactly one road from any device to any screen.
+  /// </para>
+  /// <para>
   /// The reference's client translated remote buttons through <c>InputMappings.xml</c> before a screen ever
   /// saw a key; our screens have so far compared against hard-coded keys, which works until a viewer's
   /// remote reports its menu button as something other than F16. This file is that translation: an action
@@ -132,6 +141,17 @@ namespace MediaPortal.Frontend.Settings
     [JsonPropertyName("bindings")]
     public Dictionary<string, List<string>> Bindings { get; set; } =
         new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// What one particular device answers differently - keyed by the name the device reports itself with (the
+    /// evdev pad name on Linux, "XInput slot N" on Windows), each entry holding the same action-to-keys table
+    /// as <see cref="Bindings"/>. Optional: a file without this section is the global-only format and loads
+    /// unchanged. An unknown device simply never matches, so a hand-edited entry for a pad that is not plugged
+    /// costs nothing.
+    /// </summary>
+    [JsonPropertyName("devices")]
+    public Dictionary<string, KeyBindings> Devices { get; set; } =
+        new Dictionary<string, KeyBindings>(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// The keys the shipped front end answers without anybody editing a file: the keyboard's letters and the
@@ -244,7 +264,33 @@ namespace MediaPortal.Frontend.Settings
         merged.Bindings[entry.Key] = new List<string>(entry.Value);
       }
 
+      // The per-device tables ride along with their own repairs done, so asking a device's bindings later is a
+      // plain lookup. A device entry whose action repeats another action's whole default pair is repaired the
+      // same way the global table is - the file said "Details: I, Apps" back when that was true, not today.
+      foreach (KeyValuePair<string, KeyBindings> device in read.Devices)
+      {
+        if (device.Value == null)
+          continue;
+        merged.Devices[device.Key] = Merged(device.Value, defaults, out _);
+      }
+
       return merged;
+    }
+
+    /// <summary>
+    /// The bindings to ask for an input that came from <paramref name="device"/>: that device's own table where
+    /// the file names it, the global table everywhere else. This is what GamepadRemote asks with the pad's name,
+    /// and what a keyboard-shaped event answers to because its device is nobody's special one.
+    /// </summary>
+    public KeyBindings ForDevice(string? device)
+    {
+      if (!string.IsNullOrEmpty(device))
+      {
+        KeyBindings? own;
+        if (Devices.TryGetValue(device!, out own) && own != null)
+          return own;
+      }
+      return this;
     }
 
     /// <summary>
@@ -441,6 +487,7 @@ namespace MediaPortal.Frontend.Settings
         }
 
         read.Bindings ??= new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        read.Devices ??= new Dictionary<string, KeyBindings>(StringComparer.OrdinalIgnoreCase);
         return read;
       }
       catch (Exception ex)

@@ -27,6 +27,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MediaPortal.Frontend.Player
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LiquidGlassAvaloniaUI", "Frontend\LiquidGlassAvaloniaUI\LiquidGlassAvaloniaUI.csproj", "{A2004F30-2C4C-4781-BCF3-77D75343A8EC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MediaPortal.Frontend.Gamepads", "Frontend\MediaPortal.Frontend.Gamepads\MediaPortal.Frontend.Gamepads.csproj", "{160E946D-CDF1-448C-AA7D-1FF30DACEF59}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -157,6 +159,18 @@ Global
 		{A2004F30-2C4C-4781-BCF3-77D75343A8EC}.Release|x64.Build.0 = Release|Any CPU
 		{A2004F30-2C4C-4781-BCF3-77D75343A8EC}.Release|x86.ActiveCfg = Release|Any CPU
 		{A2004F30-2C4C-4781-BCF3-77D75343A8EC}.Release|x86.Build.0 = Release|Any CPU
+		{160E946D-CDF1-448C-AA7D-1FF30DACEF59}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{160E946D-CDF1-448C-AA7D-1FF30DACEF59}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{160E946D-CDF1-448C-AA7D-1FF30DACEF59}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{160E946D-CDF1-448C-AA7D-1FF30DACEF59}.Debug|x64.Build.0 = Debug|Any CPU
+		{160E946D-CDF1-448C-AA7D-1FF30DACEF59}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{160E946D-CDF1-448C-AA7D-1FF30DACEF59}.Debug|x86.Build.0 = Debug|Any CPU
+		{160E946D-CDF1-448C-AA7D-1FF30DACEF59}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{160E946D-CDF1-448C-AA7D-1FF30DACEF59}.Release|Any CPU.Build.0 = Release|Any CPU
+		{160E946D-CDF1-448C-AA7D-1FF30DACEF59}.Release|x64.ActiveCfg = Release|Any CPU
+		{160E946D-CDF1-448C-AA7D-1FF30DACEF59}.Release|x64.Build.0 = Release|Any CPU
+		{160E946D-CDF1-448C-AA7D-1FF30DACEF59}.Release|x86.ActiveCfg = Release|Any CPU
+		{160E946D-CDF1-448C-AA7D-1FF30DACEF59}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -170,5 +184,6 @@ Global
 		{BBE1C42B-191A-48F0-81E3-9B3CB4CDF759} = {FBF56CC3-7AE6-AD2D-3F14-7F97FD322CD6}
 		{5FA8FAEF-7666-42FB-8637-A542763A0AD9} = {CE609670-85B9-0D16-FB54-ED063D5D8A6D}
 		{A2004F30-2C4C-4781-BCF3-77D75343A8EC} = {CE609670-85B9-0D16-FB54-ED063D5D8A6D}
+		{160E946D-CDF1-448C-AA7D-1FF30DACEF59} = {CE609670-85B9-0D16-FB54-ED063D5D8A6D}
 	EndGlobalSection
 EndGlobal

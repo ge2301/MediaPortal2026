@@ -133,6 +133,15 @@ namespace MediaPortal.Frontend.Theming
     [ObservableProperty]
     private bool _showTime = true;
 
+    /// <summary>
+    /// Whether the head line shows its clock-and-date cluster at all. The reference's settings masters carried
+    /// no clock in their header (its dialogs had none either), so a screen that IS a settings room asks for the
+    /// cluster to stay away through ShellWindow.SetChromeHeadlineShown; the home never asks and keeps it.
+    /// True by default because a header that hides its clock unasked is a broken clock everywhere else.
+    /// </summary>
+    [ObservableProperty]
+    private bool _showHeadline = true;
+
     /// <summary>Whether the head line may show its date - the reference's <c>ShowDate</c>, next to its twin.</summary>
     [ObservableProperty]
     private bool _showDate = true;

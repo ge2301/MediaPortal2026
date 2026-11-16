@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The gamepad seam, the same shape as MediaPortal.Frontend.Player's: what the platform knows about pads
+    stays in here, and everything above this assembly speaks GamepadState and GamepadButton only.
+
+    Rules, same shape as the player's:
+      - net10.0, never a -windows suffix, and CA1416 as an error. This assembly has to load on Android.
+      - No MP2 project references and no Avalonia reference. Who turns a button into an action is the front
+        end's business (Input/GamepadRemote.cs); this assembly only reads pads.
+      - The platform routes are lazy: XInput's DLL and /dev/input are only touched when somebody asks
+        IsAvailable, so referencing this assembly costs nothing on a machine that has no route.
+      - evdev and XInput are plain syscalls/exports - no binding package, no native library to fetch, and no
+        licensing decision to make (unlike libCEC in the CEC plan).
+
+    GenerateAssemblyInfo is off because VersionInfo.cs is linked in, the way the front end and the API
+    assembly do it, so the pad layer reports the product version rather than 1.0.0.0.
+    -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>MediaPortal.Frontend.Gamepads</RootNamespace>
+    <AssemblyName>MediaPortal.Frontend.Gamepads</AssemblyName>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <Nullable>enable</Nullable>
+    <WarningsAsErrors>CA1416</WarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\Core\MediaPortal.Common\VersionInfo\VersionInfo.cs" Link="Properties\VersionInfo.cs" />
+  </ItemGroup>
+
+</Project>

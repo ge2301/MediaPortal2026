@@ -283,8 +283,9 @@ namespace Tests.Frontend
           .OfType<ContentControl>().Single(c => c.Name == "ChromeScreenArea");
       Grid layout = screenArea.Parent as Grid;
       Assert.That(layout, Is.Not.Null, "the screen stands in the shell\'s own rows");
-      Assert.That(layout.Children.Count, Is.EqualTo(3),
-          "the window lays three rows - the skin\'s header, the screen, the skin\'s footer - and no row for a "
+      Assert.That(layout.Children.Count, Is.EqualTo(4),
+          "the window lays three rows - the skin's header, the screen, the skin's footer - plus one quiet word "
+          + "at the foot of the screen (the caption shown where a room wears no header), and no row for a "
           + "navigation bar, so the screen is taller by what the strip of crumbs used to take");
       Assert.That(Grid.GetRow(screenArea), Is.EqualTo(1), "and the screen is the middle row, under the header");
 

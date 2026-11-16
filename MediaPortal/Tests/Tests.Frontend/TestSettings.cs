@@ -142,7 +142,7 @@ namespace Tests.Frontend
     }
 
     [AvaloniaTest]
-    public void PickingAPlateOpensItsScreenBesideTheNarrowedList()
+    public void PickingAPlateOpensItsScreenOnTheFullWidth()
     {
       SettingsViewModel model = Model(new int[1]);
       ShellWindow window = new ShellWindow(new SettingsView(model));
@@ -154,11 +154,15 @@ namespace Tests.Frontend
 
       Assert.That(model.CurrentView, Is.Not.Null);
       Assert.That(((Label)model.CurrentView!).Name, Is.EqualTo("sources"));
-      Assert.That(model.IsWall, Is.False, "with a screen open the plates narrow to a list");
+      Assert.That(model.IsWall, Is.False, "a screen is open, so the hub no longer shows a wall");
       Assert.That(model.Status, Is.Empty, "a section that opened has nothing to complain about");
 
       Label? shown = window.GetVisualDescendants().OfType<Label>().FirstOrDefault(l => l.Name == "sources");
       Assert.That(shown, Is.Not.Null, "and the screen is on the window, not merely in the model");
+
+      // The level the viewer came from is NOT listed again beside the screen: the same entries they just
+      // pressed past, repeated down the left edge, were redundancy and nothing else (viewer: "Wozu?").
+      Assert.That(window.GetVisualDescendants().OfType<ListBox>().Count(l => l.Name == "sectionList"),          Is.EqualTo(0), "there is no narrowed list beside an open screen any more");
 
       window.Close();
     }
@@ -249,7 +253,7 @@ namespace Tests.Frontend
     }
 
     [AvaloniaTest]
-    public void APageBehindADoorOpensItsScreenBesideTheNarrowedList()
+    public void APageBehindADoorOpensItsScreenOnTheFullWidth()
     {
       SettingsViewModel model = TwoLevels(new int[1]);
       ShellWindow window = new ShellWindow(new SettingsView(model));
@@ -263,7 +267,7 @@ namespace Tests.Frontend
 
       Assert.That(model.CurrentView, Is.Not.Null);
       Assert.That(((Label)model.CurrentView!).Name, Is.EqualTo("pictures"));
-      Assert.That(model.IsWall, Is.False, "with a page open the list narrows and the screen stands beside it");
+      Assert.That(model.IsWall, Is.False, "a page is open, and it takes the whole room on its own");
       Assert.That(model.CanGoBack, Is.True);
 
       Label? shown = window.GetVisualDescendants().OfType<Label>().FirstOrDefault(l => l.Name == "pictures");

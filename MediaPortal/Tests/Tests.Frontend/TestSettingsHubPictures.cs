@@ -178,7 +178,7 @@ namespace Tests.Frontend
       List<string> plates = (await general.Pages()!).Select(p => p.Name).ToList();
       Assert.That(plates, Is.EqualTo(new[]
       {
-          "System", "Connectivity", "Server settings", "Shutdown menu"
+          "System", "Connectivity", "Server settings", "Shutdown menu", "Input devices"
       }));
     }
 

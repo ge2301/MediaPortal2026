@@ -110,6 +110,9 @@
          package; it needs its own assembly because it compiles with AllowUnsafeBlocks and names its shaders
          by its own assembly name (avares://LiquidGlassAvaloniaUI/...). -->
     <ProjectReference Include="..\LiquidGlassAvaloniaUI\LiquidGlassAvaloniaUI.csproj" />
+    <!-- The gamepad seam. What the platform knows about pads stays in there; this front end only ever sees
+         GamepadState readings and turns their buttons into keys through KeyBindings, like every other source. -->
+    <ProjectReference Include="..\MediaPortal.Frontend.Gamepads\MediaPortal.Frontend.Gamepads.csproj" />
   </ItemGroup>
 
   <ItemGroup>

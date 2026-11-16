@@ -42,16 +42,13 @@
            Stretch="Fill"
            IsHitTestVisible="False"/>
 
-  <Grid RowDefinitions="Auto,*" RowSpacing="8" Margin="40,20">
+  <Grid RowDefinitions="*" Margin="40,20">
 
-    <!-- The way back, alone on the right. The reference let the back key out of its configuration screen
-         altogether; this hub stops at the first level, where the shell takes the key on. -->
-    <Button Grid.Row="0" Name="backButton" Classes="nereus-text-action" Content="Back"
-            HorizontalAlignment="Right"
-            ToolTip.Tip="{Binding Location}"
-            IsVisible="{Binding CanGoBack}" Click="OnBackClick"/>
+    <!-- No back button of its own: the shell's header already carries the mouse's way out, and the remote's
+         Back key stops at the first level, where the shell takes the key on (the reference let the back key
+         out of its configuration screen altogether). -->
 
-    <Panel Grid.Row="1" Name="contentHost">
+      <Panel Name="contentHost">
 
       <!-- The wall. A WrapPanel of plates, the reference's ItemsPanel spelled the same way; the plates
            themselves belong to the worn skin, which dresses them as its own SettingsMenuItemDataTemplate
@@ -129,36 +126,15 @@
       </ListBox>
       </LayoutTransformControl>
 
-      <!-- The narrowed list beside the open screen, which is the shape this hub had before it had walls. -->
-      <Grid ColumnDefinitions="330,*" ColumnSpacing="24" IsVisible="{Binding ShowingContents}">
-
-        <ListBox Name="sectionList" Grid.Column="0"
-                 Focusable="True"
-                 ItemsSource="{Binding Sections}"
-                 SelectedItem="{Binding Selected, Mode=TwoWay}"
-                 theming:SkinTemplates.TileTemplate="SettingsRowTemplate"
-                 FontSize="18"
-                 Background="Transparent"
-                 BorderThickness="0">
-          <ListBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:SettingsSection">
-              <!-- The reference's rows said the section's name and, when it had one, its help line - and nothing
-                   else. Whose answer a section is (the front end's own or the server's) is a fact of building
-                   this hub, not a line a household reads, so it stays out of the row. -->
-              <StackPanel Spacing="1" Margin="0,5,8,7">
-                <TextBlock Text="{Binding Name}" FontSize="19"/>
-                <TextBlock Text="{Binding Description}" FontSize="13" Opacity="0.65" TextWrapping="Wrap"
-                           IsVisible="{Binding Description, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-              </StackPanel>
-            </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
-
-        <Grid Grid.Column="1" RowDefinitions="*,Auto">
-          <ContentControl Name="sectionView" Grid.Row="0" Content="{Binding CurrentView}"/>
-          <TextBlock Grid.Row="1" Name="statusLine" Text="{Binding Status}" FontSize="14" Opacity="0.8"
-                     TextWrapping="Wrap"/>
-        </Grid>
+      <!-- The open screen, alone on the full width. It used to stand beside a narrowed copy of the level the
+           viewer had just come from - the same entries they pressed their way past a moment ago, listed again
+           down the left edge for no reason anybody could say aloud, and holding the keyboard the page itself
+           needed. The reference's tree replaced its level rather than repeating it down the side, and so does
+           this: an open page takes the whole room, and Back is the way out. -->
+      <Grid IsVisible="{Binding ShowingContents}" RowDefinitions="*,Auto">
+        <ContentControl Name="sectionView" Grid.Row="0" Content="{Binding CurrentView}"/>
+        <TextBlock Grid.Row="1" Name="statusLine" Text="{Binding Status}" FontSize="14" Opacity="0.8"
+                   TextWrapping="Wrap"/>
       </Grid>
 
       <!-- A wall has nothing beside it, so what the hub has to say - "Media opens 9 page(s)", or why a folder

@@ -28,6 +28,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using MediaPortal.Frontend.Api;
 using MediaPortal.Frontend.Caching;
+using MediaPortal.Frontend.Gamepads;
 using MediaPortal.Frontend.Player;
 using MediaPortal.Frontend.Services;
 using MediaPortal.Frontend.Settings;
@@ -733,6 +734,10 @@ namespace MediaPortal.Frontend
 
         // The worn skin's own step and click sounds, heard through the one window every screen lives in.
         Theming.SkinSounds.Attach(_shell);
+
+        // The pad route, if this machine has one. Chosen where the front end composes its other readers; a
+        // machine without a route says so once on the console and behaves exactly as it did before pads.
+        Input.GamepadRemote.Attach(_shell, Gamepads.GamepadSource.ForThisMachine());
       }
 
       base.OnFrameworkInitializationCompleted();
@@ -2083,7 +2088,21 @@ namespace MediaPortal.Frontend
                     // The reference drew plate pictures for its tree nodes only, never for a configuration
                     // line - so this plate wears the System family's picture, the way the Diagnostics plate
                     // wore its icon before it.
-                    "General_System", "General_System"));
+                    "General_System", "General_System"),
+                new SettingsSection("Input devices", "Frontend",
+                    "Map what every button means: press a button to pick its device, re-bind actions by pressing the new key",
+                    delegate
+                    {
+                      // The reference's InputDevices branch rebuilt as an editor: the chooser listens for the
+                      // device to configure, its table shows each action's current answer, and the learning
+                      // step writes into keybindings.json - the file the front end reads live.
+                      InputDevicesViewModel inputs = new InputDevicesViewModel();
+                      InputDevicesView view = new InputDevicesView { DataContext = inputs };
+                      return view;
+                    },
+                    // The reference's own InputDevices tile: SkinBase's InputDevices.jpg as the plate picture
+                    // and Icon_InputDevices.png as the band icon, copied into both shipped skins.
+                    "Input_Devices", "Input_Devices"));
           },
           "General");
 

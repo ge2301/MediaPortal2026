@@ -225,10 +225,27 @@ namespace MediaPortal.Frontend.ViewModels
     /// </summary>
     public string HeaderTitle => _trail.Count == 0 ? "Settings" : _trail[_trail.Count - 1].Folder.Name;
 
+    /// <summary>
+    /// The name of the screen the viewer is standing on right now, for the corner word at the foot of the
+    /// window: an open page answers with its own name, a folder's wall with the folder's, and the first wall
+    /// with "Settings". Where <see cref="HeaderTitle"/> names the door last walked through, this names the
+    /// room actually being looked at.
+    /// </summary>
+    public string ScreenName
+    {
+      get
+      {
+        if (ShowingContents && Selected != null)
+          return Selected.Name;
+        return HeaderTitle;
+      }
+    }
+
     partial void OnShowingContentsChanged(bool value)
     {
       OnPropertyChanged(nameof(IsWall));
       OnPropertyChanged(nameof(CanGoBack));
+      OnPropertyChanged(nameof(ScreenName));
     }
 
     /// <summary>
@@ -273,6 +290,10 @@ namespace MediaPortal.Frontend.ViewModels
 
     partial void OnSelectedChanged(SettingsSection? value)
     {
+      // The corner word follows the screen that is open, and a pick that opens nothing new still has to
+      // leave the word where it was - hence the re-ask rather than a direct write.
+      OnPropertyChanged(nameof(ScreenName));
+
       if (value == null)
         return;
 
@@ -331,8 +352,53 @@ namespace MediaPortal.Frontend.ViewModels
       }
 
       CurrentView = view;
+      FocusWanted = null; // an ask from the screen that was open before belongs to that screen alone
       ShowingContents = true;
+      // The screen a plate opened is what the viewer came for, and it takes the whole room now - the keyboard
+      // belongs to it. SettingsView watches this moment: it stands on the control the page asks for (see
+      // AskFocusFrom) or on the first focusable thing inside the page, and asks again while the rows are drawn.
       Status = string.Empty;
+    }
+
+    /// <summary>
+    /// The control an open screen asked the keyboard for, or null to leave the keyboard where it is.
+    /// </summary>
+    public Control? FocusWanted { get; set; }
+
+    /// <summary>
+    /// A page's own re-ask after it changed shape (the editor moving from chooser to table), or after it armed
+    /// itself and wants its focusable content stood on.
+    /// </summary>
+    public void StandOnOpenScreen()
+    {
+      if (ShowingContents)
+        StandOnContent(CARET_TRIES);
+    }
+
+    private const int CARET_TRIES = 6;
+
+    /// <summary>
+    /// Moves the keyboard onto the open screen's asked control - the chooser of the input devices editor, the
+    /// list of whatever page comes next. Asked-for controls are often not drawn the moment the build returns
+    /// (the content host has one ContentControl standing in them), so this asks again each layout pass while
+    /// the same screen is still the one open.
+    /// </summary>
+    private void StandOnContent(int tries)
+    {
+      Control? wanted = FocusWanted;
+      if (wanted == null)
+        return;     // a page that asks for nothing keeps the keyboard where it was, like it always did
+      if (wanted.Focus())
+        return;
+
+      if (tries <= 0 || !ShowingContents)
+        return;
+
+      Dispatcher.UIThread.Post(delegate
+      {
+        if (ShowingContents && ReferenceEquals(FocusWanted, wanted))
+          StandOnContent(tries - 1);
+      }, DispatcherPriority.Loaded);
     }
 
     /// <summary>
@@ -397,6 +463,9 @@ namespace MediaPortal.Frontend.ViewModels
     {
       Selected = null;
       CurrentView = null;
+      // A door's pages are read straight away - the wall of them replaces this level in the same press - so
+      // this hub never stands beside its own level's list. That list was always the previous screen read
+      // again: the reference's tree replaced its level too rather than repeating it down the side.
       ShowingContents = false;
 
       Sections = new ObservableCollection<SettingsSection>(level);
@@ -424,6 +493,7 @@ namespace MediaPortal.Frontend.ViewModels
       {
         ShowingContents = false;
         Selected = null;
+        FocusWanted = null;   // the left page's ask is not the returned wall's ask
         Status = string.Empty;
         return true;
       }

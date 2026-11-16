@@ -80,6 +80,19 @@
     <Setter Property="Foreground" Value="{DynamicResource ScreenBackgroundBrush}"/>
     <Setter Property="CornerRadius" Value="5"/>
   </Style>
+  <!-- The sheet's OWN words, and they are not the screen's words: the item-level rule above cannot always be
+       heard. Every row template of this skin lays a TextBlock into the item, and a word painted in no colour
+       of its own asks the theme - which answers with its accent, the turquoise that was this skin's stock
+       selection colour. On the panel that reads fine; on the white sheet it is white on white, invisible. So
+       the black of the screen is spelled on the presenter (which inherits down into every plain TextBlock)
+       and on the common descendants outright. -->
+  <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource TextBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource ScreenBackgroundBrush}"/>
+  </Style>
+  <Style Selector="ListBoxItem:selected :is(TextBlock)">
+    <Setter Property="Foreground" Value="{DynamicResource ScreenBackgroundBrush}"/>
+  </Style>
   <!-- The theme paints its own selected ground inside the item's template, behind which no word spoken on
        the item itself reaches. So the white sheet is spelled where the theme spells its accent: on the
        ContentPresenter, in every dress the theme puts a selected row in - plain, under the pointer, with

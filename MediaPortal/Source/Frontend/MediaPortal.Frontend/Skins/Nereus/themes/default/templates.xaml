@@ -385,6 +385,34 @@
   </DataTemplate>
 
   <!--
+    One action's row in the input devices editor: the action's name in quiet type, the keys that answer it
+    today beside it, so a viewer walking the list sees what a press means without opening anything. The Clear
+    button rides the row model's own command, which is why any skin can draw this row without wiring code.
+  -->
+  <DataTemplate x:Key="BindingRowTemplate" x:DataType="vm:InputDevicesViewModel+ActionRow">
+    <Grid ColumnDefinitions="300,*,Auto" ColumnSpacing="16" Margin="4,5">
+      <TextBlock Grid.Column="0" Text="{Binding Action}"
+                 FontSize="{DynamicResource SmallerFontSize}"
+                 VerticalAlignment="Center"/>
+      <TextBlock Grid.Column="1" Text="{Binding Keys}"
+                 FontSize="{DynamicResource SmallerFontSize}"
+                 Opacity="0.7"
+                 TextWrapping="Wrap"
+                 VerticalAlignment="Center"/>
+      <Button Grid.Column="2" Content="Clear" Command="{Binding ClearMappingCommand}"
+              IsVisible="{Binding Overridden}"
+              FontSize="{DynamicResource TinyFontSize}"
+              Focusable="True"
+              VerticalAlignment="Center"/>
+    </Grid>
+  </DataTemplate>
+
+  <!-- A device's name in the input devices chooser. -->
+  <DataTemplate x:Key="DeviceRowTemplate" x:DataType="x:String">
+    <TextBlock Text="{Binding}" FontSize="{DynamicResource SmallFontSize}" Margin="4,6"/>
+  </DataTemplate>
+
+  <!--
     A server the finder discovered: its name in the loud type, address and version in quiet type under it,
     with Nereus' hairline rule so the pickable rows read as a list.
   -->
