@@ -246,7 +246,7 @@ namespace Tests.Frontend
       Assert.That(model.Location, Is.EqualTo("Settings › Media"),
           "the heading says where they are, the way the reference printed its path above the list");
       Assert.That(model.IsWall, Is.True, "a door has no screen of its own, so its level is a wall again");
-      Assert.That(model.Status, Does.Contain("2 page(s)"), "and the wall says what it opened");
+      Assert.That(model.Status, Is.Empty, "the wall says nothing about the level it opened - the plates speak");
       Assert.That(Plates(window), Is.EqualTo(new[] { "Pictures", "Fanart" }));
 
       window.Close();

@@ -448,9 +448,9 @@ namespace MediaPortal.Frontend.ViewModels
 
       _trail.Add((folder, _level));
       ShowLevel(pages);
-      Status = pages.Count == 0
-          ? folder.Name + " has nothing to open at the moment."
-          : string.Format("{0} opens {1} page(s).", folder.Name, pages.Count);
+      // Nothing is said about the level that just opened: "Media opens 9 page(s)" under the wall was noise -
+      // the plates say what they are, and a household reading its settings has no use for a count of them.
+      Status = string.Empty;
     }
 
     /// <summary>
