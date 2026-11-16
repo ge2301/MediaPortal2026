@@ -71,13 +71,58 @@ namespace MediaPortal.Frontend.ViewModels
       get
       {
         Assembly assembly = typeof(SystemStatusViewModel).Assembly;
-        string? informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-            ?.InformationalVersion;
-        Version? simple = assembly.GetName().Version;
-        if (!string.IsNullOrEmpty(informational) && informational!.Length <= 40)
-          return informational!;
-        return simple?.ToString() ?? "unknown";
+        // The informational version of this checkout is a leftover from upstream's build farm - it reads
+        // "origin/EXP-Net6-..." however new the build is, because only their build step rewrites that line.
+        // What answers for this program is the runtime it actually runs on and the commit its own tree was
+        // built from; both are read live rather than remembered from a stamp.
+        string framework = System.Environment.Version.ToString(2);
+        string revision = ThisCheckoutRevision();
+        return ".NET " + framework + (revision.Length > 0 ? " · " + revision : "");
       }
+    }
+
+    /// <summary>The HEAD commit of the checkout this front end was built from, short form; empty if unknown.</summary>
+    private static string ThisCheckoutRevision()
+    {
+      try
+      {
+        string? root = LocateRepositoryRoot();
+        string head = System.IO.Path.Combine(root ?? "", ".git", "HEAD");
+        if (root == null || !System.IO.File.Exists(head))
+          return string.Empty;
+        string line = System.IO.File.ReadAllText(head).Trim();
+        // An unborn or detached HEAD names the commit directly; a branch HEAD says "ref: refs/heads/...".
+        if (line.StartsWith("ref:", StringComparison.OrdinalIgnoreCase))
+        {
+          string refPath = System.IO.Path.Combine(root!, ".git", line.Substring(4).Trim().Replace('/', System.IO.Path.DirectorySeparatorChar));
+          if (!System.IO.File.Exists(refPath))
+            return string.Empty;
+          line = System.IO.File.ReadAllText(refPath).Trim();
+        }
+
+        return line.Length >= 7 ? line.Substring(0, 7) : line;
+      }
+      catch
+      {
+        return string.Empty; // a system screen never fails over a version line
+      }
+    }
+
+    private static string? LocateRepositoryRoot()
+    {
+      try
+      {
+        for (var dir = new System.IO.DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+        {
+          if (System.IO.Directory.Exists(System.IO.Path.Combine(dir.FullName, ".git")))
+            return dir.FullName;
+        }
+      }
+      catch
+      {
+      }
+
+      return null;
     }
 
     /// <summary>Rebuilds every line. Called when the section opens and by the reload button.</summary>
