@@ -56,15 +56,6 @@ namespace MediaPortal.Frontend.ViewModels
 
     public ObservableCollection<Line> Lines { get; } = new ObservableCollection<Line>();
 
-    public string Heading => "System";
-
-    public string Subtitle =>
-        "What this box and the server behind it are made of - read from each running thing as it stands, "
-        + "not remembered from a previous start.";
-
-    [ObservableProperty]
-    private string _status = "";
-
     /// <summary>This assembly's version, the same number the server reports when it is the same build.</summary>
     public static string FrontendVersion
     {
@@ -125,7 +116,7 @@ namespace MediaPortal.Frontend.ViewModels
       return null;
     }
 
-    /// <summary>Rebuilds every line. Called when the section opens and by the reload button.</summary>
+    /// <summary>Rebuilds every line. Called when the section opens.</summary>
     [RelayCommand]
     public async Task ReloadAsync()
     {
@@ -144,7 +135,6 @@ namespace MediaPortal.Frontend.ViewModels
       if (client == null)
       {
         Lines.Add(new Line("Server", "no server address set - see the \"Server address\" row"));
-        Status = "The machine's own lines; the server will join them when one is set.";
         return;
       }
 
@@ -160,14 +150,11 @@ namespace MediaPortal.Frontend.ViewModels
               (string.IsNullOrEmpty(info.OsArchitecture) ? "" : " (" + info.OsArchitecture + ")")));
         }
         Lines.Add(new Line("Server process", "id " + info.ProcessId));
-        Status = info.Version == FrontendVersion
-            ? "Both machines report the same version."
-            : "Frontend " + FrontendVersion + ", server " + info.Version + " - they do not report the same version.";
+        // Whether the two versions agree is said by the lines themselves, not by a sentence under them.
       }
       catch (Exception e)
       {
         Lines.Add(new Line("Server", "did not answer: " + e.Message));
-        Status = "The server did not answer about itself.";
       }
     }
 

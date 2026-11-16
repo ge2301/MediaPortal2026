@@ -23,9 +23,9 @@ using MediaPortal.Frontend.ViewModels;
 namespace MediaPortal.Frontend.Views
 {
   /// <summary>
-  /// The system status as a screen: the lines on a list the arrows can walk and one press that makes them
-  /// true again. Built for the settings hub the way the other screens are - the hub embeds it and hands the
-  /// view model over as DataContext.
+  /// The system status as a screen: the lines on a list the arrows can walk. Built for the settings hub the
+  /// way the other screens are - the hub embeds it and hands the view model over as DataContext. There is no
+  /// button to read them again; opening the section reads them.
   /// </summary>
   public partial class SystemStatusView : UserControl
   {
@@ -37,7 +37,6 @@ namespace MediaPortal.Frontend.Views
       InitializeComponent();
 
       _ring.Add(linesList);
-      _ring.Add(reloadButton);
       DpadNavigation.Attach(this, _ring);
 
       // Opening the section reads the lines, so the screen never shows a start-up's answers as if they were

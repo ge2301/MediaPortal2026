@@ -113,6 +113,24 @@
     <Setter Property="Background" Value="{DynamicResource TextBrush}"/>
   </Style>
 
+  <!-- The keyboard's row, for a list the viewer walks rather than picks. A plain ListBoxItem that only holds
+       the focus still wore the theme's accent turquoise - on the system lines, where nothing is ever
+       selected, every arrow therefore dragged a turquoise bar over the screen. The walked row wears the
+       white sheet of a selection instead (the same plate-under-words law), and its words the screen's own
+       black; lists whose rows dress their own focus (the wall, the rails, the editors) are not touched. -->
+  <Style Selector="ListBoxItem:focus:not(:selected)">
+    <Setter Property="Background" Value="{DynamicResource TextBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource ScreenBackgroundBrush}"/>
+    <Setter Property="CornerRadius" Value="5"/>
+  </Style>
+  <Style Selector="ListBoxItem:focus:not(:selected) /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource TextBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource ScreenBackgroundBrush}"/>
+  </Style>
+  <Style Selector="ListBoxItem:focus:not(:selected) :is(TextBlock)">
+    <Setter Property="Foreground" Value="{DynamicResource ScreenBackgroundBrush}"/>
+  </Style>
+
   <!--
     The ground of a music tile that has no cover. The reference painted the skin's own colour behind the music
     mark - the medium of the skin's family at rest, the light of it stood on - because an album whose art was

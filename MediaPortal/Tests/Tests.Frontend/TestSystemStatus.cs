@@ -84,26 +84,11 @@ namespace Tests.Frontend
       SystemStatusViewModel model = new SystemStatusViewModel(() => api, () => "no skin, palette default");
       await model.ReloadAsync();
 
-      Assert.That(api.Asked, Is.EqualTo(1), "one press reads the server exactly once");
+      Assert.That(api.Asked, Is.EqualTo(1), "opening the section reads the server exactly once");
       Assert.That(model.Lines.First(l => l.Label == "Server").Value,
           Is.EqualTo("MediaPortal 2 Server 2.5.2305.14606"), "the server speaks for itself");
       Assert.That(model.Lines.First(l => l.Label == "Server runtime").Value, Is.EqualTo(".NET 10.0"));
       Assert.That(model.Lines.First(l => l.Label == "Server process").Value, Does.Contain("4242"));
-    }
-
-    [Test]
-    public async Task TheTwoVersionsAgreeOrSayThatTheyDoNot()
-    {
-      SystemStatusViewModel same = new SystemStatusViewModel(
-          () => new FakeInfoApi { Info = Server(SystemStatusViewModel.FrontendVersion) }, () => "none");
-      await same.ReloadAsync();
-      Assert.That(same.Status, Does.Contain("same version"), "and it says so when they do");
-
-      SystemStatusViewModel apart = new SystemStatusViewModel(
-          () => new FakeInfoApi { Info = Server("2.0.0.0") }, () => "none");
-      await apart.ReloadAsync();
-      Assert.That(apart.Status, Does.Contain("do not report the same version"),
-          "and it says so when they do not");
     }
 
     [Test]
